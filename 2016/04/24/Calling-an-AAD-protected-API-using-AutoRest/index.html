@@ -1,0 +1,491 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="UTF-8" >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Sander Molenkamp&#39;s Blog">
+    <title>Calling an AAD protected API using AutoRest - Sander Molenkamp&#39;s Blog</title>
+    <meta name="author" content="Sander Molenkamp">
+    
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <meta name="description" content="In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service.">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Calling an AAD protected API using AutoRest">
+<meta property="og:url" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/index.html">
+<meta property="og:site_name" content="Sander Molenkamp's Blog">
+<meta property="og:description" content="In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service.">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard01.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard02.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard03.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions01.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions02.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions03.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions04.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AccessKey01.png">
+<meta property="og:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/ApiAppAuth01.png">
+<meta property="og:updated_time" content="2016-04-29T06:26:51.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Calling an AAD protected API using AutoRest">
+<meta name="twitter:description" content="In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service.">
+<meta name="twitter:image" content="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard01.png">
+<meta name="twitter:creator" content="@amolenk">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://amolenk.com/assets/images/profile.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-quwccsthbllipo6252snb2tfkddvrsp1eczkytpz3vmxpsb6nwodixemlkux.min.css">
+    <!--STYLES END-->
+    
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <h1 class="header-title">
+        <a class="header-title-link" href="/ ">Sander Molenkamp&#39;s Blog</a>
+    </h1>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/profile.jpg"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    
+        <div class="sidebar-profile">
+            <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/profile.jpg"/>
+            </a>
+            <span class="sidebar-profile-name">Sander Molenkamp</span>
+        </div>
+    
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/ "
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-home"></i>
+                    <span class="sidebar-button-desc">Home</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="#about"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-question"></i>
+                    <span class="sidebar-button-desc">About</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://github.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-github"></i>
+                    <span class="sidebar-button-desc">GitHub</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://twitter.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-twitter"></i>
+                    <span class="sidebar-button-desc">Twitter</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://www.linkedin.com/in/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-linkedin"></i>
+                    <span class="sidebar-button-desc">LinkedIn</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/atom.xml"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-rss"></i>
+                    <span class="sidebar-button-desc">RSS</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+</nav>
+
+            
+            <div id="main" data-behavior="4"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post" itemscope itemType="http://schema.org/BlogPosting">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title" itemprop="headline">
+            Calling an AAD protected API using AutoRest
+        </h1>
+    
+    <div class="post-meta">
+    <time itemprop="datePublished" content="Sun Apr 24 2016 17:42:19 GMT+0200">
+	
+		    Apr 24, 2016
+    	
+    </time>
+    
+</div>
+</div>
+    
+    <div class="post-content markdown" itemprop="articleBody">
+        <div class="main-content-wrap">
+            <p>In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service. It supports many types of authentication providers, but for this post I’ll use Azure Active Directory. Once that is set up,  I’ll show how to generate a client library for the API using AutoRest. The generated client authenticates with the API App by using a bearer token that is retrieved from Azure AD by providing application identity (service principal) credentials.</p>
+<a id="more"></a>
+<h2 id="Register-applications-in-Azure-AD"><a href="#Register-applications-in-Azure-AD" class="headerlink" title="Register applications in Azure AD"></a>Register applications in Azure AD</h2><p>You’ll use two Azure AD applications: one for the protected API app and one for the calling app. Follow these steps for each application to add them to Azure AD:</p>
+<ol>
+<li><p>In the Classic Azure portal, navigate to the <strong>Applications</strong> tab of your Azure AD tenant. </p>
+</li>
+<li><p>In the bottom toolbar, click <strong>Add</strong> to add a new application to the directory.</p>
+</li>
+<li><p>In the pop-up window that opens, select <strong>Add an application my organization is developing</strong>:</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard01.png" alt="AddApplicationWizard01.png" title="">
+</li>
+<li><p>Enter the name of your API / application and make sure <strong>Web Application and/or Web API</strong> is selected:</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard02.png" alt="AddApplicationWizard02.png" title="">
+</li>
+<li><p>Enter the URL of the API / application. You can use the same URL as the App ID URI.    </p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard03.png" alt="AddApplicationWizard03.png" title="">
+</li>
+<li><p>When the application has been added, navigate to the <strong>Configure</strong> tab and notice the generated <strong>client id</strong>. You’ll need the client id later on.</p>
+</li>
+</ol>
+<p>Follow the above steps for both applications, so that you’ve got an protected AD app and a caller AD app set up.</p>
+<h2 id="Set-permissions-for-caller-AD-application"><a href="#Set-permissions-for-caller-AD-application" class="headerlink" title="Set permissions for caller AD application"></a>Set permissions for caller AD application</h2><p>The caller AD application requires permission to access the protected AD application. </p>
+<ol>
+<li><p>On the <strong>Configure</strong> tab for the AD application representing the caller, scroll down to <strong>Permissions to other applications</strong> and click on <strong>Add application</strong>.</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions01.png" alt="SetPermissions01.png" title="">
+</li>
+<li><p>Select <strong>All Apps</strong> and click on the checkmark button in the upper-right corner.</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions02.png" alt="SetPermissions02.png" title="">
+</li>
+<li><p>Select the protected API and click on the <strong>Complete</strong> checkmark to close the dialog.</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions03.png" alt="SetPermissions03.png" title="">
+</li>
+<li><p>Click on <strong>Delegated Permissions</strong> and select the checkbox to access the protected AD application:</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions04.png" alt="SetPermissions04.png" title="">
+</li>
+</ol>
+<p>The caller AD application is now granted access to the protected AD application.</p>
+<h2 id="Generate-access-key-for-caller-AD-application"><a href="#Generate-access-key-for-caller-AD-application" class="headerlink" title="Generate access key for caller AD application"></a>Generate access key for caller AD application</h2><p>You also need to generate an access key (client secret) which is used to authenticate the caller application when requesting a token from Azure AD.</p>
+<ol>
+<li><p>On the <strong>Configure</strong> tab for the caller AD application, scroll down to <strong>Keys</strong> and select a duration:</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AccessKey01.png" alt="AccessKey01.png" title="">
+</li>
+<li><p>Click <strong>Save</strong> in the bottom toolbar to generate the key value. Store the value somewhere where you can retrieve it later on.</p>
+</li>
+</ol>
+<h2 id="Setup-authentication-for-the-protected-API"><a href="#Setup-authentication-for-the-protected-API" class="headerlink" title="Setup authentication for the protected API"></a>Setup authentication for the protected API</h2><ol>
+<li><p>In the (new) Azure portal, go to the <strong>Settings</strong> of your Api App and select <strong>Authentication/Authorization</strong>. </p>
+</li>
+<li><p>In the <strong>Authentication/Authorization</strong> blade, turn on <strong>App Service Authentication</strong> and select <strong>Azure Active Directory</strong> as the authentication provider.</p>
+ <img src="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/ApiAppAuth01.png" alt="ApiAppAuth01.png" title="">
+</li>
+<li><p>If the Azure AD you’re using is the default Azure AD instance for the subscription, you can simply select the Express management mode and select the application from here. Otherwise, select Advanced. You’ll need to enter the client id of the protected API as well as the <strong>Issuer URL</strong> of the Azure AD instance.</p>
+<p> To retrieve the Issuer URL:</p>
+<ol>
+<li>Navigate to your Azure AD tenant in the Classic Azure portal.</li>
+<li>In the bottom toolbar, click on <strong>View Endpoints</strong>. </li>
+<li>Copy the link to the Federation Metadata Document and paste the URL in a new browser window.</li>
+<li>In the XML document that is displayed, the <strong>Issuer URL</strong> is the value of the entityId attribute of the root EntityDescriptor element (e.g. <code>https://sts.windows.net/20ef1a8a-****-****-****-************</code>)).    </li>
+</ol>
+</li>
+<li><p>Click OK and don’t forget the save your changes on the <strong>Authentication / Authorization</strong> blade. </p>
+</li>
+</ol>
+<p>Your Api App is now protected and you can test this by opening up a browser and navigating to the Api App. You should see a sign-in page. If you’re directly taken to the service you may still be signed in to your Azure AD. Start a new browser in Private / Incognito mode to make sure you’re not already signed in.</p>
+<h2 id="Generate-a-client-library-for-the-API"><a href="#Generate-a-client-library-for-the-API" class="headerlink" title="Generate a client library for the API"></a>Generate a client library for the API</h2><p>Because the API App exposes a <a href="http://swagger.io" target="_blank" rel="external">Swagger</a> endpoint, you can use <a href="https://github.com/Azure/autorest" target="_blank" rel="external">AutoRest</a> to generate a client library to call the API. </p>
+<pre><code>autorest -Input http://localhost:8282/swagger/docs/v1 -Namespace Amolenk.ApiApp -ClientName ApiClient -AddCredentials
+</code></pre><p>This command will generate some C# files that you must add to the calling application. In addition, you must also add the <strong>Microsoft.Rest.ClientRuntime.Azure.Authentication</strong> NuGet package (at the time of writing, you should select the 2.0.1 prerelease package). This package provides ADAL based authentication for the generated client library. Adding the NuGet package will also install the <strong>Microsoft.Rest.ClientRuntime</strong> NuGet package which is required to be able to compile the generated code.</p>
+<p>Notice that I’ve used the <strong>-AddCredentials</strong> flag when running AutoRest. This tells AutoRest to include a <strong>ServiceClientCredentials</strong> property and constructor parameter in the generated client. The <strong>TokenCredentials</strong> class in the <strong>Microsoft.Rest.ClientRuntime</strong> package extends the <strong>ServiceClientCredentials</strong> class and can be used for OAuth authentication. Additionally, the <strong>Microsoft.Rest.ClientRuntime.Azure.Authentication</strong> package supports both username/password and service principal login scenarios for Azure AD.</p>
+<p>As this is an application to application scenario, the calling app will use service principal credentials to authenticate with the protected API.</p>
+<h2 id="Call-the-protected-API"><a href="#Call-the-protected-API" class="headerlink" title="Call the protected API"></a>Call the protected API</h2><p>To call the protected API, you need the following information:</p>
+<ol>
+<li>The <strong>client ids</strong> of both the protected and caller apps.</li>
+<li>The generated <strong>access key</strong> of the calling app.</li>
+<li>The <strong>Authority URL</strong>, which contains the name of the Azure AD tenant in which you provisioned your apps. The format should be <a href="https://login.windows.net/tenant-name.onmicrosoft.com" target="_blank" rel="external">https://login.windows.net/tenant-name.onmicrosoft.com</a>. </li>
+</ol>
+<p>Using this information, you can use the code below to access the protected app:</p>
+<figure class="highlight cs"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> clientCredential = <span class="keyword">new</span> ClientCredential(</span><br><span class="line">    callerAppClientId, callerAppAccessKey);</span><br><span class="line"></span><br><span class="line">AuthenticationContext context = <span class="keyword">new</span> AuthenticationContext(authorityUrl);</span><br><span class="line">AuthenticationResult authenticationResult = context.AcquireToken(</span><br><span class="line">    protectedAppClientId, clientCredential);</span><br><span class="line">ApplicationTokenProvider tokenProvider = <span class="keyword">new</span> ApplicationTokenProvider(</span><br><span class="line">    context, protectedAppClientId, clientCredential, authenticationResult);</span><br><span class="line"></span><br><span class="line">TokenCredentials creds = <span class="keyword">new</span> TokenCredentials(tokenProvider);</span><br><span class="line"></span><br><span class="line"><span class="comment">// DeviceManagementClient class is generated using AutoRest</span></span><br><span class="line"><span class="keyword">var</span> client = <span class="keyword">new</span> DeviceManagementClient(creds);</span><br><span class="line">client.BaseUri = <span class="keyword">new</span> Uri(<span class="string">"https://amolenk-devicemanagementapi.azurewebsites.net"</span>);</span><br><span class="line">client.Device.SayHelloAsync();</span><br></pre></td></tr></table></figure>
+<p>On a side note: the <strong>ApplicationTokenProvider</strong> used in the example also exposes a <strong>LoginSilentAsync</strong> method which directly returns a <strong>ServiceClientCredentials</strong> instance and would be nicer to use than the code above. Unfortunately though, there’s no way to pass the client id of the protected API because <strong>LoginSilentAsync</strong> requires the audience to be of type <strong>Uri</strong>, while a client id is a <strong>string</strong>. I’ve opened an issue for this at <a href="https://github.com/Azure/autorest/issues/835" target="_blank" rel="external">https://github.com/Azure/autorest/issues/835</a>.</p>
+
+            
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/AutoRest/">AutoRest</a> <a class="tag tag--primary tag--small t-link" href="/tags/Azure-Active-Directory/">Azure Active Directory</a> <a class="tag tag--primary tag--small t-link" href="/tags/Azure-App-Services/">Azure App Services</a>
+
+            </div>
+        
+        <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/"  data-tooltip="Deploying a Service Fabric cluster in an existing VNET">
+                
+                    <i class="fa fa-angle-left"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/04/15/Started-Dutch-Azure-Meetup/" data-tooltip="Started Dutch Azure Meetup">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions"  href="#btn-open-shareoptions">
+                <i class="fa fa-share-alt"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-google-plus"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-facebook-official"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-twitter"></i>
+            </a>
+        </li>
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#">
+            
+                <i class="fa fa-list"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2017 Sander Molenkamp. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/"  data-tooltip="Deploying a Service Fabric cluster in an existing VNET">
+                
+                    <i class="fa fa-angle-left"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/04/15/Started-Dutch-Azure-Meetup/" data-tooltip="Started Dutch Azure Meetup">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions"  href="#btn-open-shareoptions">
+                <i class="fa fa-share-alt"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-google-plus"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-facebook-official"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-twitter"></i>
+            </a>
+        </li>
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#">
+            
+                <i class="fa fa-list"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+    <ul class="share-options">
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-google-plus"></i><span class="">Share on Google Plus</span>
+            </a>
+        </li>
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-facebook-official"></i><span>Share on Facebook</span>
+            </a>
+        </li>
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                <i class="fa fa-twitter"></i><span>Share on Twitter</span>
+            </a>
+        </li>
+    </ul>
+</div>
+<div id="share-options-mask" class="share-options-mask"></div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/profile.jpg"/>
+        
+            <h4 id="about-card-name">Sander Molenkamp</h4>
+        
+            <h5 id="about-card-bio"><p>Sander Molenkamp is a Solution Architect at <a href="http://www.infosupport.com">Info Support</a> with a passion for cloud native architectures. He’s a Microsoft Azure aficionado and a Microsoft Competence Center lead within Info Support, where amongst other things he enjoys co-hosting the <a href="http://www.dotnetflix.com">dotnetFlix</a> podcast. Sander likes to travel, read books and lives in Heiloo in the Netherlands, with his wife, daughter and cat.</p>
+</h5>
+        
+        
+            <h5 id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>Solution Architect</p>
+
+            </h5>
+        
+        
+            <h5 id="about-card-location">
+                <i class="fa fa-map-marker"></i>
+                <br/>
+                The Netherlands
+            </h5>
+        
+    </div>
+</div>
+
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+    </body>
+    <!--SCRIPTS-->
+<script src="/assets/js/scrip-rjanlllosg30d03qrddpwrs6wqf4k3v0bbo68hiifuvthyhqfefx2htcagu0.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+</html>

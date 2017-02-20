@@ -1,0 +1,487 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="UTF-8" >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Sander Molenkamp&#39;s Blog">
+    <title>Avoiding data loss when using the Azure Event Hubs Processor Host SDK - Sander Molenkamp&#39;s Blog</title>
+    <meta name="author" content="Sander Molenkamp">
+    
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <meta name="description" content="I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of way">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Avoiding data loss when using the Azure Event Hubs Processor Host SDK">
+<meta property="og:url" content="http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/index.html">
+<meta property="og:site_name" content="Sander Molenkamp's Blog">
+<meta property="og:description" content="I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of way">
+<meta property="og:updated_time" content="2017-02-20T19:24:15.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Avoiding data loss when using the Azure Event Hubs Processor Host SDK">
+<meta name="twitter:description" content="I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of way">
+<meta name="twitter:creator" content="@amolenk">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://amolenk.com/assets/images/profile.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-quwccsthbllipo6252snb2tfkddvrsp1eczkytpz3vmxpsb6nwodixemlkux.min.css">
+    <!--STYLES END-->
+    
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <h1 class="header-title">
+        <a class="header-title-link" href="/ ">Sander Molenkamp&#39;s Blog</a>
+    </h1>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/profile.jpg"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    
+        <div class="sidebar-profile">
+            <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/profile.jpg"/>
+            </a>
+            <span class="sidebar-profile-name">Sander Molenkamp</span>
+        </div>
+    
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/ "
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-home"></i>
+                    <span class="sidebar-button-desc">Home</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="#about"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-question"></i>
+                    <span class="sidebar-button-desc">About</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://github.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-github"></i>
+                    <span class="sidebar-button-desc">GitHub</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://twitter.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-twitter"></i>
+                    <span class="sidebar-button-desc">Twitter</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://www.linkedin.com/in/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-linkedin"></i>
+                    <span class="sidebar-button-desc">LinkedIn</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/atom.xml"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-rss"></i>
+                    <span class="sidebar-button-desc">RSS</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+</nav>
+
+            
+            <div id="main" data-behavior="4"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post" itemscope itemType="http://schema.org/BlogPosting">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title" itemprop="headline">
+            Avoiding data loss when using the Azure Event Hubs Processor Host SDK
+        </h1>
+    
+    <div class="post-meta">
+    <time itemprop="datePublished" content="Fri Nov 11 2016 19:02:25 GMT+0100">
+	
+		    Nov 11, 2016
+    	
+    </time>
+    
+</div>
+</div>
+    
+    <div class="post-content markdown" itemprop="articleBody">
+        <div class="main-content-wrap">
+            <p>I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of ways. We use Azure Stream Analytics to transform and forward the data to various subscribers. For more complex scenario’s where the functionality provided by Stream Analytics isn’t sufficient, we use the <a href="https://www.nuget.org/packages/Microsoft.Azure.ServiceBus.EventProcessorHost" target="_blank" rel="external">Event Processor Host SDK</a> (hosted in a stateless Service Fabric service) to process the events.</p>
+<a id="more"></a>
+<p>The Event Processor Host SDK works by registering event processors with the Event Processor Host. An event processor has a <strong>ProcessEventsAsync</strong> method which is called for each batch of messages received from the Event Hub.
+In the code sample below, I filter out all interactive events (such as alerts from the electricity meters) and forward those messages to a Service Bus queue for further processing.</p>
+<pre><code>public class InteractiveEventProcessor : IEventProcessor
+{
+    public async Task ProcessEventsAsync(PartitionContext context, IEnumerable&lt;EventData&gt; messages)
+    {
+        // Filter out all the events that must be forwarded to a service bus topic.
+        var interactiveEvents = messages.Where(msg =&gt; msg.Properties[“IsInteractive”] == true).ToList();
+
+        // Publish the filtered events to the topic.
+        await PublishToServiceBus(interactiveEvents);
+
+        // Set a checkpoint to mark our progress.
+        await context.CheckpointAsync();
+    }
+    ...
+</code></pre><p>While running some integration tests, I noticed that not all interactive events were being forwarded to the Service Bus queue.
+Further investigation showed that the <strong>InteractiveEventProcessor</strong> encountered some exceptions when the service started.
+These were transient errors caused by the fact that I’m deleting and re-creating Service Bus queues on each test run.
+I didn’t think this would cause any problems because when the event processor is registered, I specify an exception handler by passing a configured <strong>EventProcessorOptions</strong> instance.</p>
+<pre><code>var processorOptions = new EventProcessorOptions();
+processorOptions.ExceptionReceived += EventProcessorOptions_ExceptionReceived;
+
+await _processorHost.RegisterEventProcessorAsync&lt;InteractiveEventProcessor&gt;(processorOptions);
+</code></pre><p>The handler simply logs the exception. I’m using NLog here:</p>
+<pre><code>private void EventProcessorOptions_ExceptionReceived(object sender, ExceptionReceivedEventArgs e)
+{
+    _logger.Error()
+        .Exception(e.Exception)
+        .Message(&quot;Error occured in event processor&quot;)
+        .Property(&quot;Action&quot;, e.Action)
+        .Write();
+}
+</code></pre><p>After the exception is logged, the Event Processor Host will keep the <strong>InteractiveEventProcessor</strong> running.
+Since the exception occurs before the <strong>CheckpointAsync</strong> method has been called, the checkpoint is still at its original location and the <strong>ProcessEventsAsync</strong> method will receive the same batch of messages again to retry.
+At least I thought so…</p>
+<p>As it turns out, that last batch of messages is lost.
+The Event Processor Host will continue with the next batch of messages as if nothing happened.
+The fact that the checkpoint is still at its original location is irrelevant because the checkpoint is only used when the lease for the <strong>InteractiveEventProcessor</strong> is lost, which isn’t the case here.</p>
+<p>So if you don’t want to lose any messages, you need to add some retry logic to the <strong>ProcessEventsAsync</strong> method to handle any transient errors.
+One way to accomplish this is to use a specialized library such as <a href="https://github.com/App-vNext/Polly" target="_blank" rel="external">Polly</a>:</p>
+<pre><code>public async Task ProcessEventsAsync(PartitionContext context, IEnumerable&lt;EventData&gt; messages)
+{
+    // Filter out all the events that must be forwarded to a service bus topic.
+    var interactiveEvents = messages.Where(msg =&gt; msg.Properties[“IsInteractive”] == true).ToList();
+
+    // Publish the filtered events to the topic, wrapped in a Polly retry policy.
+    Policy
+        .Handle&lt;MessagingException&gt;()
+        .WaitAndRetryForeverAsync(_ =&gt; TimeSpan.FromSeconds(1))
+        .ExecuteAsync(() =&gt; PublishToServiceBus(interactiveEvents));
+
+    // Set a checkpoint to mark our progress.
+    await context.CheckpointAsync();
+}
+</code></pre><p>I don’t think it’s a bad design decision that the event processor host skips the messages when an exception is thrown.
+It was just a bit unexpected because the exception occured before the checkpoint call.
+Event Hubs and the Event Processor Host are mainly used to receive and process very large amounts of messages.
+In those scenario’s it’s usually more important to keep the messages flowing than to block the stream because some messages encountered an error.
+If you’re concerned about losing even a single message, Service Bus may be even a better option with its message-level Complete and Abandon operations.</p>
+<h2 id="Update-2017-02-20"><a href="#Update-2017-02-20" class="headerlink" title="Update 2017-02-20:"></a>Update 2017-02-20:</h2><p>Some additional remarks:</p>
+<ul>
+<li><p>Make sure your retry code correctly handles LeaseLostException.
+This exception is thrown when the specific event processor loses its lease on the Event Hub partition.
+The correct way to handle this is to either not catch it or rethrow it.
+Another event processor will get the lease and start processing from the last checkpointed position.</p>
+</li>
+<li><p>While retrying, the main program may want to cancel the event processor, which the code snippet above does not take into account.
+Since the <code>ProcessEventsAsync</code> method does not take a <code>CancellationToken</code> parameter,
+you’ll need to inject your own cancellation token through the constructor and check it periodically while retrying.</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">public class InteractiveEventProcessor : IEventProcessor</span><br><span class="line">&#123;</span><br><span class="line">    private readonly CancellationToken _cancellationToken;</span><br><span class="line"></span><br><span class="line">    public InteractiveEventProcessor(CancellationToken cancellationToken)</span><br><span class="line">    &#123;</span><br><span class="line">        _cancellationToken = cancellationToken;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
+<p>  When an event processor does not have a default constructor, it needs an <code>IEventProcessorFactory</code> to be instantiated:</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">public class InteractiveEventProcessorFactory : IEventProcessorFactory</span><br><span class="line">&#123;</span><br><span class="line">    private readonly CancellationToken _cancellationToken;</span><br><span class="line"></span><br><span class="line">    public InteractiveEventProcessorFactory(CancellationToken cancellationToken)</span><br><span class="line">    &#123;</span><br><span class="line">        _cancellationToken = cancellationToken;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    public IEventProcessor CreateEventProcessor(PartitionContext context)</span><br><span class="line">    &#123;</span><br><span class="line">        return new InteractiveEventProcessor(_cancellationToken);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>  The last step is to register the factory with the Event Processor Host:</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">CancellationTokenSource cts = new CancellationTokenSource();</span><br><span class="line">IEventProcessorFactory processorFactory = new InteractiveEventProcessorFactory(cts.Token);</span><br><span class="line"></span><br><span class="line">await eventProcessorHost.RegisterEventProcessorFactoryAsync(processorFactory);</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>Remember that the goal of the Event Processor Host is to process a lot of messages fast.
+Whether it’s worth it to take some time to perform retries when message processing fails is dependent on your specific scenario.
+An alternative to retrying the same message processing operation is to push the message on a dead-letter queue,
+which may be another Event Hub or some other queueing mechanism such as a Service Bus queue.</p>
+</li>
+</ul>
+
+            
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/Azure-Event-Hubs/">Azure Event Hubs</a> <a class="tag tag--primary tag--small t-link" href="/tags/Event-Processor-Host-SDK/">Event Processor Host SDK</a> <a class="tag tag--primary tag--small t-link" href="/tags/Polly/">Polly</a>
+
+            </div>
+        
+        <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/11/01/DEVIntersection-Las-Vegas-2016/" data-tooltip="DEVintersection Las Vegas 2016">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions"  href="#btn-open-shareoptions">
+                <i class="fa fa-share-alt"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-google-plus"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-facebook-official"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-twitter"></i>
+            </a>
+        </li>
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#">
+            
+                <i class="fa fa-list"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2017 Sander Molenkamp. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/11/01/DEVIntersection-Las-Vegas-2016/" data-tooltip="DEVintersection Las Vegas 2016">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions"  href="#btn-open-shareoptions">
+                <i class="fa fa-share-alt"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-google-plus"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-facebook-official"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-twitter"></i>
+            </a>
+        </li>
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#">
+            
+                <i class="fa fa-list"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+    <ul class="share-options">
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-google-plus"></i><span class="">Share on Google Plus</span>
+            </a>
+        </li>
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-facebook-official"></i><span>Share on Facebook</span>
+            </a>
+        </li>
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                <i class="fa fa-twitter"></i><span>Share on Twitter</span>
+            </a>
+        </li>
+    </ul>
+</div>
+<div id="share-options-mask" class="share-options-mask"></div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/profile.jpg"/>
+        
+            <h4 id="about-card-name">Sander Molenkamp</h4>
+        
+            <h5 id="about-card-bio"><p>Sander Molenkamp is a Solution Architect at <a href="http://www.infosupport.com">Info Support</a> with a passion for cloud native architectures. He’s a Microsoft Azure aficionado and a Microsoft Competence Center lead within Info Support, where amongst other things he enjoys co-hosting the <a href="http://www.dotnetflix.com">dotnetFlix</a> podcast. Sander likes to travel, read books and lives in Heiloo in the Netherlands, with his wife, daughter and cat.</p>
+</h5>
+        
+        
+            <h5 id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>Solution Architect</p>
+
+            </h5>
+        
+        
+            <h5 id="about-card-location">
+                <i class="fa fa-map-marker"></i>
+                <br/>
+                The Netherlands
+            </h5>
+        
+    </div>
+</div>
+
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+    </body>
+    <!--SCRIPTS-->
+<script src="/assets/js/scrip-rjanlllosg30d03qrddpwrs6wqf4k3v0bbo68hiifuvthyhqfefx2htcagu0.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+</html>

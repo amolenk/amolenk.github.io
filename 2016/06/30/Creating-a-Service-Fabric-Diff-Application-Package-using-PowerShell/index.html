@@ -1,0 +1,581 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="UTF-8" >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Sander Molenkamp&#39;s Blog">
+    <title>Creating a Service Fabric Diff Application Package using PowerShell - Sander Molenkamp&#39;s Blog</title>
+    <meta name="author" content="Sander Molenkamp">
+    
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <meta name="description" content="For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the buil">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Creating a Service Fabric Diff Application Package using PowerShell">
+<meta property="og:url" content="http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/index.html">
+<meta property="og:site_name" content="Sander Molenkamp's Blog">
+<meta property="og:description" content="For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the buil">
+<meta property="og:updated_time" content="2016-07-12T13:33:55.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Creating a Service Fabric Diff Application Package using PowerShell">
+<meta name="twitter:description" content="For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the buil">
+<meta name="twitter:creator" content="@amolenk">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://amolenk.com/assets/images/profile.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-quwccsthbllipo6252snb2tfkddvrsp1eczkytpz3vmxpsb6nwodixemlkux.min.css">
+    <!--STYLES END-->
+    
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <h1 class="header-title">
+        <a class="header-title-link" href="/ ">Sander Molenkamp&#39;s Blog</a>
+    </h1>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/profile.jpg"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    
+        <div class="sidebar-profile">
+            <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/profile.jpg"/>
+            </a>
+            <span class="sidebar-profile-name">Sander Molenkamp</span>
+        </div>
+    
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/ "
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-home"></i>
+                    <span class="sidebar-button-desc">Home</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="#about"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-question"></i>
+                    <span class="sidebar-button-desc">About</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://github.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-github"></i>
+                    <span class="sidebar-button-desc">GitHub</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://twitter.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-twitter"></i>
+                    <span class="sidebar-button-desc">Twitter</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://www.linkedin.com/in/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-linkedin"></i>
+                    <span class="sidebar-button-desc">LinkedIn</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/atom.xml"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-rss"></i>
+                    <span class="sidebar-button-desc">RSS</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+</nav>
+
+            
+            <div id="main" data-behavior="4"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post" itemscope itemType="http://schema.org/BlogPosting">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title" itemprop="headline">
+            Creating a Service Fabric Diff Application Package using PowerShell
+        </h1>
+    
+    <div class="post-meta">
+    <time itemprop="datePublished" content="Thu Jun 30 2016 21:04:50 GMT+0200">
+	
+		    Jun 30, 2016
+    	
+    </time>
+    
+</div>
+</div>
+    
+    <div class="post-content markdown" itemprop="articleBody">
+        <div class="main-content-wrap">
+            <p>For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the build is run and (if succesful) a release is created and automatically deployed. 
+The release pipeline basically does two things: 1) make sure the environment is up to date using some ARM templates and 2) upgrade the Service Fabric application to the new version.</p>
+<p>Upgrading the application requires that you increment the version numbers in the application and service manifests. 
+One way to deal with this is simply by incrementing the version number of each service whether or not it has actually been modified.
+You can do this by using an auto-generated build number as explained in <a href="http://www.colinsalmcorner.com/post/continuous-deployment-of-service-fabric-apps-using-vsts-or-tfs" target="_blank" rel="external">Colin’s blogpost</a>.
+In a lot of situations this works fine because Service Fabric allows for zero downtime deployments.</p>
+<p>However, we needed to be sure that some services aren’t unnecessarily upgraded. 
+Some of the stateful services in the application maintain connections to external hardware devices. 
+We don’t want to interrupt these each time we need to roll-out a change in any of the other services.</p>
+<a id="more"></a>
+<p>The solution we use for now is manually incrementing the version numbers of the modified services before we commit to the master branch
+(which is obviously not ideal because you must be careful not to make any mistakes).
+Fortunately, the Visual Studio tools help here a bit by providing a nice UI (right-click <code>Edit Manifest Versions...</code> on a Service Fabric project).</p>
+<p>Using the incremented versions numbers, we create a diff application package using a PowerShell script.
+A diff package contains only the files that changed between the last and current versions.
+It does however always contain the full application manifest and all service manifest files.
+You can read more on differential packages <a href="https://azure.microsoft.com/en-us/documentation/articles/service-fabric-application-upgrade-advanced/#upgrade-with-a-diff-package" target="_blank" rel="external">here</a>.</p>
+<p>We prefer a diff package to a full application package because even though nothing may have changed in the code of a particular service, 
+the assemblies created by the build may have been changed when compared to the previous version.
+When this is the case and the version number is not incremented, Service Fabric will raise an error when you try to deploy the application.
+By using a diff package we are sure that we only include the assemblies for the services that have actual changes.</p>
+<p>The diff package script performs the following steps:</p>
+<ol>
+<li>Creates the output folder for the diff package. If it already exists it will be deleted, so watch out.</li>
+<li>Retrieves application version from the cluster to verify that we really do need a diff package.</li>
+<li>Includes the application manifest in the diff package.</li>
+<li>Iterates over the service manifests and compares the version numbers with the version numbers of the currently deployed services.
+Code and config packages with higher version numbers are included in the diff package.</li>
+</ol>
+<p>Before running the script, make sure you’re connected to your cluster using <code>Connect-ServiceFabricCluster</code>.</p>
+<pre><code>&lt;#
+.SYNOPSIS 
+Creates a diff package for deploying a Service Fabric application to a cluster.
+
+.DESCRIPTION
+This script creates a diff packages based on a given package directory and the current state of the cluster.
+
+.PARAMETER ApplicationPackagePath
+Path to the directory containing the original application package (input directory).
+
+.PARAMETER DiffPackagePath
+Path to the directory where to output the created diff application package.
+
+.PARAMETER ApplicationName
+Name of the Service Fabric application.
+
+#&gt;
+
+Param
+(
+    [String]
+    $ApplicationPackagePath,
+
+    [String]
+    $DiffPackagePath,
+
+    [String]
+    $ApplicationName
+)
+
+###############################################################################
+# Create output directory.
+###############################################################################
+
+Write-Host &quot;Creating diff package from $ApplicationPackagePath&quot;
+
+# Ensure that the output directory for the Diff package exists.
+if (Test-Path $DiffPackagePath)
+{
+    Remove-Item -Path $DiffPackagePath\* -Force -Recurse | Out-Null
+}
+
+New-Item -ItemType Directory -Path $DiffPackagePath
+
+###############################################################################
+# Check that the new version number is higher than the currently running application.
+###############################################################################
+
+# Try to get the application info from the cluster.
+$application = Get-ServiceFabricApplication -ApplicationName $ApplicationName
+
+# If we&apos;ve got a result, a version of the application is already running.
+if ($application -ne $null) {
+
+    Write-Host &quot;Detected version $($application.ApplicationTypeVersion) of application running on cluster&quot;
+
+} else {
+
+    Write-Host &quot;No current version detected. Using full application package.&quot;
+
+    Copy-Item -Path (Join-Path $ApplicationPackagePath &apos;*&apos;) -Destination $DiffPackagePath -Recurse
+    exit
+}
+
+# Load the application manifest.
+$applicationManifestPath = Join-Path $ApplicationPackagePath &quot;ApplicationManifest.xml&quot;
+$appManifestXml = [xml] (Get-Content $applicationManifestPath)
+if (!$appManifestXml)
+{
+    $errMsg = &quot;Failed to load application manifest XML.&quot;
+    throw $errMsg
+}
+
+$applicationTypeName = $appManifestXml.ApplicationManifest.ApplicationTypeName
+
+###############################################################################
+# Create the diff package
+###############################################################################
+
+Copy-Item -Path $applicationManifestPath -Destination $DiffPackagePath
+
+# Iterate over service manifests. For each service, verify whether it must be part of the diff package.
+# If not, remove the service files from the diff package directory.
+$appManifestXml.ApplicationManifest.ChildNodes | foreach {
+
+    if ($_.LocalName -eq &apos;ServiceManifestImport&apos;) {
+
+        $serviceManifestName = $_.ServiceManifestRef.ServiceManifestName
+        $serviceManifestVersion = $_.ServiceManifestRef.ServiceManifestVersion
+        $servicePath = [io.path]::Combine($ApplicationPackagePath, $serviceManifestName)
+        $serviceManifestPath = [io.path]::Combine($servicePath, &apos;ServiceManifest.xml&apos;) 
+
+        # Load the new service manifest XML.
+        $newServiceManifest = [xml] (Get-Content $serviceManifestPath)
+        if (!$newServiceManifest)
+        {
+            $errMsg = &quot;Failed to load service manifest XML for $serviceManifestName.&quot;
+            throw $errMsg
+        }
+
+        $newCodePackageVersion = $newServiceManifest.ServiceManifest.CodePackage.Version
+        $newConfigPackageVersion = $newServiceManifest.ServiceManifest.ConfigPackage.Version
+
+        # Load the old service manifest.
+        $oldServiceManifest = [xml] (Get-ServiceFabricServiceManifest -ApplicationTypeName $applicationTypeName -ApplicationTypeVersion $application.ApplicationTypeVersion -ServiceManifestName $serviceManifestName -ErrorAction SilentlyContinue)
+        $oldCodePackageVersion = &apos;0.0.0&apos;;
+        $oldConfigPackageVersion = &apos;0.0.0&apos;;
+
+        if ($oldServiceManifest)
+        {
+            $oldCodePackageVersion = $oldServiceManifest.ServiceManifest.CodePackage.Version
+            $oldConfigPackageVersion = $oldServiceManifest.ServiceManifest.ConfigPackage.Version
+        }
+
+        # Create the destination directory
+        $diffServicePath = Join-Path $DiffPackagePath $serviceManifestName
+        New-Item -ItemType Directory -Path $diffServicePath | Out-Null
+
+        # Copy the service manifest
+        Copy-Item -Path $serviceManifestPath -Destination $diffServicePath
+
+        # Copy the CodePackage if it is updated
+        if ([System.Version]$newCodePackageVersion -gt [System.Version]$oldCodePackageVersion) {
+
+            Write-Host &quot;Including code package for service $serviceManifestName (version $serviceManifestVersion).&quot;
+
+            Copy-Item -Path (Join-Path $servicePath &apos;Code&apos;) -Destination $diffServicePath -Recurse
+        }
+        else {
+            Write-Host &quot;Excluding code package for service $serviceManifestName (version $serviceManifestVersion).&quot;
+        }
+
+        # Copy the Config if it is updated
+        if ([System.Version]$newConfigPackageVersion -gt [System.Version]$oldConfigPackageVersion) {
+
+            Write-Host &quot;Including config package for service $serviceManifestName (version $serviceManifestVersion).&quot;
+
+            Copy-Item -Path (Join-Path $servicePath &apos;Config&apos;) -Destination $diffServicePath -Recurse
+        }
+        else {
+            Write-Host &quot;Excluding config package for service $serviceManifestName (version $serviceManifestVersion).&quot;
+        }
+    }
+}
+</code></pre>
+            
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/Azure-Service-Fabric/">Azure Service Fabric</a>
+
+            </div>
+        
+        <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/10/01/Service-Fabric-Actor-Model-lab/"  data-tooltip="Service Fabric Actor Model lab">
+                
+                    <i class="fa fa-angle-left"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/" data-tooltip="Deploying a Service Fabric cluster in an existing VNET">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions"  href="#btn-open-shareoptions">
+                <i class="fa fa-share-alt"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-google-plus"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-facebook-official"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-twitter"></i>
+            </a>
+        </li>
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#">
+            
+                <i class="fa fa-list"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2017 Sander Molenkamp. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/10/01/Service-Fabric-Actor-Model-lab/"  data-tooltip="Service Fabric Actor Model lab">
+                
+                    <i class="fa fa-angle-left"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/" data-tooltip="Deploying a Service Fabric cluster in an existing VNET">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions"  href="#btn-open-shareoptions">
+                <i class="fa fa-share-alt"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-google-plus"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-facebook-official"></i>
+            </a>
+        </li>
+        <li class="post-action hide-xs">
+            <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-twitter"></i>
+            </a>
+        </li>
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#">
+            
+                <i class="fa fa-list"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+    <ul class="share-options">
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-google-plus"></i><span class="">Share on Google Plus</span>
+            </a>
+        </li>
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-facebook-official"></i><span>Share on Facebook</span>
+            </a>
+        </li>
+        <li class="share-option">
+            <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                <i class="fa fa-twitter"></i><span>Share on Twitter</span>
+            </a>
+        </li>
+    </ul>
+</div>
+<div id="share-options-mask" class="share-options-mask"></div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/profile.jpg"/>
+        
+            <h4 id="about-card-name">Sander Molenkamp</h4>
+        
+            <h5 id="about-card-bio"><p>Sander Molenkamp is a Solution Architect at <a href="http://www.infosupport.com">Info Support</a> with a passion for cloud native architectures. He’s a Microsoft Azure aficionado and a Microsoft Competence Center lead within Info Support, where amongst other things he enjoys co-hosting the <a href="http://www.dotnetflix.com">dotnetFlix</a> podcast. Sander likes to travel, read books and lives in Heiloo in the Netherlands, with his wife, daughter and cat.</p>
+</h5>
+        
+        
+            <h5 id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>Solution Architect</p>
+
+            </h5>
+        
+        
+            <h5 id="about-card-location">
+                <i class="fa fa-map-marker"></i>
+                <br/>
+                The Netherlands
+            </h5>
+        
+    </div>
+</div>
+
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+    </body>
+    <!--SCRIPTS-->
+<script src="/assets/js/scrip-rjanlllosg30d03qrddpwrs6wqf4k3v0bbo68hiifuvthyhqfefx2htcagu0.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+</html>

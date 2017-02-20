@@ -1,0 +1,680 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="UTF-8" >
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Sander Molenkamp&#39;s Blog">
+    <title>Archives: 2016 - Sander Molenkamp&#39;s Blog</title>
+    <meta name="author" content="Sander Molenkamp">
+    
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <meta name="description">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Sander Molenkamp's Blog">
+<meta property="og:url" content="http://amolenk.com/archives/2016/index.html">
+<meta property="og:site_name" content="Sander Molenkamp's Blog">
+<meta property="og:description">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Sander Molenkamp's Blog">
+<meta name="twitter:description">
+<meta name="twitter:creator" content="@amolenk">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://amolenk.com/assets/images/profile.jpg"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-quwccsthbllipo6252snb2tfkddvrsp1eczkytpz3vmxpsb6nwodixemlkux.min.css">
+    <!--STYLES END-->
+    
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="2">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <h1 class="header-title">
+        <a class="header-title-link" href="/ ">Sander Molenkamp&#39;s Blog</a>
+    </h1>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/profile.jpg"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="2">
+    
+        <div class="sidebar-profile">
+            <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/profile.jpg"/>
+            </a>
+            <span class="sidebar-profile-name">Sander Molenkamp</span>
+        </div>
+    
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/ "
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-home"></i>
+                    <span class="sidebar-button-desc">Home</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="#about"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-question"></i>
+                    <span class="sidebar-button-desc">About</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://github.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-github"></i>
+                    <span class="sidebar-button-desc">GitHub</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://twitter.com/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-twitter"></i>
+                    <span class="sidebar-button-desc">Twitter</span>
+                </a>
+        </li>
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link " href="https://www.linkedin.com/in/amolenk" target="_blank">
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-linkedin"></i>
+                    <span class="sidebar-button-desc">LinkedIn</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+        <ul class="sidebar-buttons">
+        
+            <li class="sidebar-button">
+                
+                    <a  class="sidebar-button-link "
+                         href="/atom.xml"
+                        
+                    >
+                
+                    <i class="sidebar-button-icon fa fa-lg fa-rss"></i>
+                    <span class="sidebar-button-desc">RSS</span>
+                </a>
+        </li>
+        
+    </ul>
+    
+</nav>
+
+            
+            <div id="main" data-behavior="2"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+    
+
+<section class="postShorten-group main-content-wrap">
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-right" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/">
+                            Avoiding data loss when using the Azure Event Hubs Processor Host SDK
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Fri Nov 11 2016 19:02:25 GMT+0100">
+	
+		    Nov 11, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-excerpt" itemprop="articleBody">
+                    <p>I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of ways. We use Azure Stream Analytics to transform and forward the data to various subscribers. For more complex scenario’s where the functionality provided by Stream Analytics isn’t sufficient, we use the <a href="https://www.nuget.org/packages/Microsoft.Azure.ServiceBus.EventProcessorHost">Event Processor Host SDK</a> (hosted in a stateless Service Fabric service) to process the events.</p>
+                    
+                        <a href="/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/" class="postShorten-excerpt_link link">
+                            Continue reading
+                        </a>
+                        
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-bottom" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/11/01/DEVIntersection-Las-Vegas-2016/">
+                            DEVintersection Las Vegas 2016
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Tue Nov 01 2016 16:43:22 GMT+0100">
+	
+		    Nov 01, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-content" itemprop="articleBody">
+                    <p>I recently visited the DEVintersection conference in Las Vegas. 
+It’s a very nice conference with interesting workshops. I attended a two-day TypeScript / Angular2 workshop by John Papa and Dan Wahlin.</p>
+<p>While there, Edwin van Wijk and I interviewed Scott Guthrie and Scott Hanselman for the <a href="http://www.dotnetflix.com" target="_blank" rel="external">dotnetFlix</a> podcast.
+You can view these episodes at the following links:</p>
+<ul>
+<li><a href="https://channel9.msdn.com/Series/dotnetflix/Scott-Guthrie-Dev-Intersection-Las-Vegas" target="_blank" rel="external">Interview with Scott Guthrie at Dev Intersection - Las Vegas</a></li>
+<li><a href="https://channel9.msdn.com/Series/dotnetflix/Scott-Hanselman-Dev-Intersection-Las-Vegas" target="_blank" rel="external">Interview with Scott Hanselman at Dev Intersection - Las Vegas</a></li>
+</ul>
+
+                    
+                        
+                    
+                    
+                        <p>
+                            <a href="/2016/11/01/DEVIntersection-Las-Vegas-2016/#post-footer" class="postShorten-excerpt_link link">
+                                Share
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-bottom" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/10/21/Tech-Days-NL-2016/">
+                            Tech Days NL 2016
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Fri Oct 21 2016 22:53:12 GMT+0200">
+	
+		    Oct 21, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-content" itemprop="articleBody">
+                    <p>The videos of the two Tech Days NL 2016 talks I did are up on channel9:</p>
+<ul>
+<li><a href="https://channel9.msdn.com/events/TechDays/Techdays-2016-The-Netherlands/All-Actor-Model-frameworks-are-not-created-equally" target="_blank" rel="external">All Actor Model frameworks are not created equally</a></li>
+<li><a href="https://channel9.msdn.com/events/TechDays/Techdays-2016-The-Netherlands/Metering-as-a-Service-in-de-energie-sector-met-Azure" target="_blank" rel="external">Metering as a Service in de energie sector met Azure</a></li>
+</ul>
+<p>Both are in Dutch, and unfortunately there’s no sound after the first couple of slides of the second talk due to some technical difficulties :-(</p>
+<p>At the conference I also had the chance to talk to both the opening and closing keynote speakers for the <a href="http://www.dotnetflix.com" target="_blank" rel="external">dotnetFlix</a> podcast.
+You can view these episodes at the following links:</p>
+<ul>
+<li><a href="https://channel9.msdn.com/Series/dotnetflix/Interview-Corey-Sanders-TechDaysNL2016" target="_blank" rel="external">Interview with Corey Sanders at TechDays NL 2016</a></li>
+<li><a href="https://channel9.msdn.com/Series/dotnetflix/Interview-David-Chappell-TechDaysNL2016" target="_blank" rel="external">Interview with David Chappell at TechDays NL 2016</a></li>
+</ul>
+
+                    
+                        
+                    
+                    
+                        <p>
+                            <a href="/2016/10/21/Tech-Days-NL-2016/#post-footer" class="postShorten-excerpt_link link">
+                                Share
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-bottom" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/10/01/Service-Fabric-Actor-Model-lab/">
+                            Service Fabric Actor Model lab
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Sat Oct 01 2016 20:03:50 GMT+0200">
+	
+		    Oct 01, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-content" itemprop="articleBody">
+                    <p>I’ve published an introduction lab for Service Fabric Actor Model at <a href="https://github.com/amolenk/sf-actors-lab" target="_blank" rel="external">https://github.com/amolenk/sf-actors-lab</a>.
+The lab shows how to interact with actors and use reminders and events.</p>
+
+                    
+                        
+                    
+                    
+                        <p>
+                            <a href="/2016/10/01/Service-Fabric-Actor-Model-lab/#post-footer" class="postShorten-excerpt_link link">
+                                Share
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-right" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/">
+                            Creating a Service Fabric Diff Application Package using PowerShell
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Thu Jun 30 2016 21:04:50 GMT+0200">
+	
+		    Jun 30, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-excerpt" itemprop="articleBody">
+                    <p>For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the build is run and (if succesful) a release is created and automatically deployed. 
+The release pipeline basically does two things: 1) make sure the environment is up to date using some ARM templates and 2) upgrade the Service Fabric application to the new version.</p>
+<p>Upgrading the application requires that you increment the version numbers in the application and service manifests. 
+One way to deal with this is simply by incrementing the version number of each service whether or not it has actually been modified.
+You can do this by using an auto-generated build number as explained in <a href="http://www.colinsalmcorner.com/post/continuous-deployment-of-service-fabric-apps-using-vsts-or-tfs">Colin’s blogpost</a>.
+In a lot of situations this works fine because Service Fabric allows for zero downtime deployments.</p>
+<p>However, we needed to be sure that some services aren’t unnecessarily upgraded. 
+Some of the stateful services in the application maintain connections to external hardware devices. 
+We don’t want to interrupt these each time we need to roll-out a change in any of the other services.</p>
+                    
+                        <a href="/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/" class="postShorten-excerpt_link link">
+                            Continue reading
+                        </a>
+                        
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-right" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/">
+                            Deploying a Service Fabric cluster in an existing VNET
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Thu Jun 23 2016 11:39:27 GMT+0200">
+	
+		    Jun 23, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-excerpt" itemprop="articleBody">
+                    <p>When you create a Service Fabric cluster using the Azure Portal, there is no way to select an existing Virtual Network (VNET) to host the cluster in. Usually there is no harm in running the cluster in its own VNET. However, when you’ve got an existing VNET to support integration with a third party using a VPN tunnel, this may become a problem. Reconfiguring / recreating the VPN tunnel whenever a new cluster is deployed is not an ideal situation.</p>
+<p>Fortunately, it’s relatively easy to make some changes to the ARM template used by the Azure Portal to support an existing VNET.</p>
+                    
+                        <a href="/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/" class="postShorten-excerpt_link link">
+                            Continue reading
+                        </a>
+                        
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-right" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/">
+                            Calling an AAD protected API using AutoRest
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Sun Apr 24 2016 17:42:19 GMT+0200">
+	
+		    Apr 24, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-excerpt" itemprop="articleBody">
+                    <p>In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service. It supports many types of authentication providers, but for this post I’ll use Azure Active Directory. Once that is set up,  I’ll show how to generate a client library for the API using AutoRest. The generated client authenticates with the API App by using a bearer token that is retrieved from Azure AD by providing application identity (service principal) credentials.</p>
+                    
+                        <a href="/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/" class="postShorten-excerpt_link link">
+                            Continue reading
+                        </a>
+                        
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-bottom" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/04/15/Started-Dutch-Azure-Meetup/">
+                            Started Dutch Azure Meetup
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Fri Apr 15 2016 14:00:00 GMT+0200">
+	
+		    Apr 15, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-content" itemprop="articleBody">
+                    <p><a href="http://www.meetup.com/Dutch-Azure-Meetup/" target="_blank"><img class="wp-image-372 alignleft" src="https://blogs.infosupport.com/wp-content/uploads/2016/04/DutchAzureMeetupLogo.png" alt="Logo Meetup" width="176" height="176"></a>
+This week <a href="http://blog.olandese.nl/" target="_blank" rel="external">Marco Mansi</a>, <a href="https://pascalnaber.wordpress.com/" target="_blank" rel="external">Pascal Naber</a> and I started the Dutch Azure Meetup: <a href="http://www.meetup.com/Dutch-Azure-Meetup/" target="_blank" rel="external">http://www.meetup.com/Dutch-Azure-Meetup/</a></p>
+<p>Azure offers a lot of services and features, and this grows almost daily. It is hard to be up-to-date on all the Azure features. This meetup gives you the opportunity to learn about Azure in a practical way.</p>
+<p>We want to offer a platform for Azure enthusiasts, where you can get hands-on with the technology, talk with and learn from each other. The meetup will not handle customer cases in theory but instead we talk about deep technical details, real world experiences and best practices.</p>
+<p>Our <a href="http://www.meetup.com/Dutch-Azure-Meetup/events/230342112/" target="_blank" rel="external">first meetup</a> is planned for the 2<sup>nd</sup> of June and is all about Azure Container Service:</p>
+<p><strong>Join the first Dutch Azure Meetup!</strong></p>
+<p>Docker is taking the world by storm and Microsoft Azure Container Service is where Azure and Docker meet!</p>
+<p>During this first meetup Mark van Holsteijn will give you a brief introduction into Docker and Microsoft Container Service. After which you will have ample opportunity to get hands-on with Docker, Marathon, Azure and <a href="http://asp.net" target="_blank" rel="external">ASP.NET</a> core.</p>
+<p>We will show you how Azure Container Service provides an excellent platform for creating cross-cloud applications.</p>
+<p><strong>About the speaker</strong></p>
+<p>Mark van Holsteijn is Principal Consultant at Xebia specialized in cloud software architectures with open-source technologies.</p>
+<p><strong>Agenda</strong></p>
+<p>18:00: Dinner</p>
+<p>18:45: Word of welcome Dutch Azure Meetup</p>
+<p>18:50: Azure Container Service (by Mark van Holsteijn)</p>
+<p>19:30: Hands-on with Docker and Azure Container Service</p>
+
+                    
+                        
+                    
+                    
+                        <p>
+                            <a href="/2016/04/15/Started-Dutch-Azure-Meetup/#post-footer" class="postShorten-excerpt_link link">
+                                Share
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-right" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/04/02/Microsoft Build 2016 (Dutch)/">
+                            Microsoft Build 2016 (Dutch)
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Sat Apr 02 2016 08:39:34 GMT+0200">
+	
+		    Apr 02, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-excerpt" itemprop="articleBody">
+                    <p>Dit jaar zijn we met zes Info Supporters afgereisd naar San Francisco voor de Build conferentie. De keynote op dag 1 stond vooral in het teken van Windows 10 (met als coolste aankondiging Bash shell op Windows), X-Box, Hololens en de hele ‘conversation as a platform’ strategie met de Cortana Intellligence Suite. Onderdeel van deze suite is Cognitive Services, een verzameling van intelligente APIs waar je oplossingen mee kunt bouwen die natuurlijke communicatie methodes ondersteunen zoals bijvoorbeeld stemherkenning. In <a href="https://channel9.msdn.com/Series/dotnetflix/Language-Understanding-Intelligent-Service">dotnetFlix aflevering 34</a> gebruiken we Cognitive Services om queries in natuurlijke taal te ondersteunen.
+                    
+                        <a href="/2016/04/02/Microsoft Build 2016 (Dutch)/" class="postShorten-excerpt_link link">
+                            Continue reading
+                        </a>
+                        
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    
+    <article class="postShorten postShorten--thumbnailimg-bottom" itemscope itemType="http://schema.org/BlogPosting">
+        <div class="postShorten-wrap">
+            <div class="postShorten-header">
+                <h1 class="postShorten-title" itemprop="headline">
+                    
+                        <a class="link-unstyled" href="/2016/04/01/Interview-with-Mark-Fussell/">
+                            Interview with Mark Fussell
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time itemprop="datePublished" content="Fri Apr 01 2016 08:39:34 GMT+0200">
+	
+		    Apr 01, 2016
+    	
+    </time>
+    
+</div>
+            </div>
+            
+            
+                <div class="postShorten-content" itemprop="articleBody">
+                    <p>At //Build 2016 I had the chance to talk to Mark Fussell, a principal program manager in the core Azure team about the GA release of Azure Service Fabric.</p>
+<p>You can watch the video <a href="https://channel9.msdn.com/Series/dotnetflix/Azure-Service-Fabric-with-Mark-Fussell" target="_blank" rel="external">here</a>.</p>
+
+                    
+                        
+                    
+                    
+                        <p>
+                            <a href="/2016/04/01/Interview-with-Mark-Fussell/#post-footer" class="postShorten-excerpt_link link">
+                                Share
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+    </article>
+    
+    <div class="pagination-bar">
+    <ul class="pagination">
+        
+        
+        <li class="pagination-next">
+            <a class="btn btn--default btn--small" href="/archives/2016/page/2/">
+                    <span>OLDER POSTS</span>
+                <i class="fa fa-angle-right text-base icon-ml"></i>
+            </a>
+        </li>
+        
+        <li class="pagination-number">page 1 of 2</li>
+    </ul>
+</div>
+
+</section>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2017 Sander Molenkamp. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/profile.jpg"/>
+        
+            <h4 id="about-card-name">Sander Molenkamp</h4>
+        
+            <h5 id="about-card-bio"><p>Sander Molenkamp is a Solution Architect at <a href="http://www.infosupport.com">Info Support</a> with a passion for cloud native architectures. He’s a Microsoft Azure aficionado and a Microsoft Competence Center lead within Info Support, where amongst other things he enjoys co-hosting the <a href="http://www.dotnetflix.com">dotnetFlix</a> podcast. Sander likes to travel, read books and lives in Heiloo in the Netherlands, with his wife, daughter and cat.</p>
+</h5>
+        
+        
+            <h5 id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>Solution Architect</p>
+
+            </h5>
+        
+        
+            <h5 id="about-card-location">
+                <i class="fa fa-map-marker"></i>
+                <br/>
+                The Netherlands
+            </h5>
+        
+    </div>
+</div>
+
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+    </body>
+    <!--SCRIPTS-->
+<script src="/assets/js/scrip-rjanlllosg30d03qrddpwrs6wqf4k3v0bbo68hiifuvthyhqfefx2htcagu0.min.js"></script>
+<!--SCRIPTS END-->
+
+
+
+</html>

@@ -1,0 +1,841 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Sander Molenkamp&#39;s Blog</title>
+  
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="http://amolenk.com/"/>
+  <updated>2017-02-20T19:24:15.000Z</updated>
+  <id>http://amolenk.com/</id>
+  
+  <author>
+    <name>Sander Molenkamp</name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Avoiding data loss when using the Azure Event Hubs Processor Host SDK</title>
+    <link href="http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/"/>
+    <id>http://amolenk.com/2016/11/11/Avoiding-data-loss-when-using-the-Azure-Event-Hubs-Processor-Host-SDK/</id>
+    <published>2016-11-11T18:02:25.000Z</published>
+    <updated>2017-02-20T19:24:15.000Z</updated>
+    
+    <content type="html">&lt;p&gt;I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of ways. We use Azure Stream Analytics to transform and forward the data to various subscribers. For more complex scenario’s where the functionality provided by Stream Analytics isn’t sufficient, we use the &lt;a href=&quot;https://www.nuget.org/packages/Microsoft.Azure.ServiceBus.EventProcessorHost&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Event Processor Host SDK&lt;/a&gt; (hosted in a stateless Service Fabric service) to process the events.&lt;/p&gt;
+&lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
+&lt;p&gt;The Event Processor Host SDK works by registering event processors with the Event Processor Host. An event processor has a &lt;strong&gt;ProcessEventsAsync&lt;/strong&gt; method which is called for each batch of messages received from the Event Hub.
+In the code sample below, I filter out all interactive events (such as alerts from the electricity meters) and forward those messages to a Service Bus queue for further processing.&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;public class InteractiveEventProcessor : IEventProcessor
+{
+    public async Task ProcessEventsAsync(PartitionContext context, IEnumerable&amp;lt;EventData&amp;gt; messages)
+    {
+        // Filter out all the events that must be forwarded to a service bus topic.
+        var interactiveEvents = messages.Where(msg =&amp;gt; msg.Properties[“IsInteractive”] == true).ToList();
+
+        // Publish the filtered events to the topic.
+        await PublishToServiceBus(interactiveEvents);
+
+        // Set a checkpoint to mark our progress.
+        await context.CheckpointAsync();
+    }
+    ...
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;While running some integration tests, I noticed that not all interactive events were being forwarded to the Service Bus queue.
+Further investigation showed that the &lt;strong&gt;InteractiveEventProcessor&lt;/strong&gt; encountered some exceptions when the service started.
+These were transient errors caused by the fact that I’m deleting and re-creating Service Bus queues on each test run.
+I didn’t think this would cause any problems because when the event processor is registered, I specify an exception handler by passing a configured &lt;strong&gt;EventProcessorOptions&lt;/strong&gt; instance.&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;var processorOptions = new EventProcessorOptions();
+processorOptions.ExceptionReceived += EventProcessorOptions_ExceptionReceived;
+
+await _processorHost.RegisterEventProcessorAsync&amp;lt;InteractiveEventProcessor&amp;gt;(processorOptions);
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;The handler simply logs the exception. I’m using NLog here:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;private void EventProcessorOptions_ExceptionReceived(object sender, ExceptionReceivedEventArgs e)
+{
+    _logger.Error()
+        .Exception(e.Exception)
+        .Message(&amp;quot;Error occured in event processor&amp;quot;)
+        .Property(&amp;quot;Action&amp;quot;, e.Action)
+        .Write();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;After the exception is logged, the Event Processor Host will keep the &lt;strong&gt;InteractiveEventProcessor&lt;/strong&gt; running.
+Since the exception occurs before the &lt;strong&gt;CheckpointAsync&lt;/strong&gt; method has been called, the checkpoint is still at its original location and the &lt;strong&gt;ProcessEventsAsync&lt;/strong&gt; method will receive the same batch of messages again to retry.
+At least I thought so…&lt;/p&gt;
+&lt;p&gt;As it turns out, that last batch of messages is lost.
+The Event Processor Host will continue with the next batch of messages as if nothing happened.
+The fact that the checkpoint is still at its original location is irrelevant because the checkpoint is only used when the lease for the &lt;strong&gt;InteractiveEventProcessor&lt;/strong&gt; is lost, which isn’t the case here.&lt;/p&gt;
+&lt;p&gt;So if you don’t want to lose any messages, you need to add some retry logic to the &lt;strong&gt;ProcessEventsAsync&lt;/strong&gt; method to handle any transient errors.
+One way to accomplish this is to use a specialized library such as &lt;a href=&quot;https://github.com/App-vNext/Polly&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Polly&lt;/a&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;public async Task ProcessEventsAsync(PartitionContext context, IEnumerable&amp;lt;EventData&amp;gt; messages)
+{
+    // Filter out all the events that must be forwarded to a service bus topic.
+    var interactiveEvents = messages.Where(msg =&amp;gt; msg.Properties[“IsInteractive”] == true).ToList();
+
+    // Publish the filtered events to the topic, wrapped in a Polly retry policy.
+    Policy
+        .Handle&amp;lt;MessagingException&amp;gt;()
+        .WaitAndRetryForeverAsync(_ =&amp;gt; TimeSpan.FromSeconds(1))
+        .ExecuteAsync(() =&amp;gt; PublishToServiceBus(interactiveEvents));
+
+    // Set a checkpoint to mark our progress.
+    await context.CheckpointAsync();
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;I don’t think it’s a bad design decision that the event processor host skips the messages when an exception is thrown.
+It was just a bit unexpected because the exception occured before the checkpoint call.
+Event Hubs and the Event Processor Host are mainly used to receive and process very large amounts of messages.
+In those scenario’s it’s usually more important to keep the messages flowing than to block the stream because some messages encountered an error.
+If you’re concerned about losing even a single message, Service Bus may be even a better option with its message-level Complete and Abandon operations.&lt;/p&gt;
+&lt;h2 id=&quot;Update-2017-02-20&quot;&gt;&lt;a href=&quot;#Update-2017-02-20&quot; class=&quot;headerlink&quot; title=&quot;Update 2017-02-20:&quot;&gt;&lt;/a&gt;Update 2017-02-20:&lt;/h2&gt;&lt;p&gt;Some additional remarks:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;p&gt;Make sure your retry code correctly handles LeaseLostException.
+This exception is thrown when the specific event processor loses its lease on the Event Hub partition.
+The correct way to handle this is to either not catch it or rethrow it.
+Another event processor will get the lease and start processing from the last checkpointed position.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;While retrying, the main program may want to cancel the event processor, which the code snippet above does not take into account.
+Since the &lt;code&gt;ProcessEventsAsync&lt;/code&gt; method does not take a &lt;code&gt;CancellationToken&lt;/code&gt; parameter,
+you’ll need to inject your own cancellation token through the constructor and check it periodically while retrying.&lt;/p&gt;
+  &lt;figure class=&quot;highlight plain&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;public class InteractiveEventProcessor : IEventProcessor&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    private readonly CancellationToken _cancellationToken;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    public InteractiveEventProcessor(CancellationToken cancellationToken)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        _cancellationToken = cancellationToken;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    ...&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;  When an event processor does not have a default constructor, it needs an &lt;code&gt;IEventProcessorFactory&lt;/code&gt; to be instantiated:&lt;/p&gt;
+  &lt;figure class=&quot;highlight plain&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;14&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;public class InteractiveEventProcessorFactory : IEventProcessorFactory&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    private readonly CancellationToken _cancellationToken;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    public InteractiveEventProcessorFactory(CancellationToken cancellationToken)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        _cancellationToken = cancellationToken;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    public IEventProcessor CreateEventProcessor(PartitionContext context)&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        return new InteractiveEventProcessor(_cancellationToken);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;#125;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&amp;#125;&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;  The last step is to register the factory with the Event Processor Host:&lt;/p&gt;
+  &lt;figure class=&quot;highlight plain&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;CancellationTokenSource cts = new CancellationTokenSource();&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;IEventProcessorFactory processorFactory = new InteractiveEventProcessorFactory(cts.Token);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;await eventProcessorHost.RegisterEventProcessorFactoryAsync(processorFactory);&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Remember that the goal of the Event Processor Host is to process a lot of messages fast.
+Whether it’s worth it to take some time to perform retries when message processing fails is dependent on your specific scenario.
+An alternative to retrying the same message processing operation is to push the message on a dead-letter queue,
+which may be another Event Hub or some other queueing mechanism such as a Service Bus queue.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;I’m currently working on a project where we use Azure Event Hubs to collect telemetry data from connected field devices such as gas and electricity meters. This data gets processed in a variety of ways. We use Azure Stream Analytics to transform and forward the data to various subscribers. For more complex scenario’s where the functionality provided by Stream Analytics isn’t sufficient, we use the &lt;a href=&quot;https://www.nuget.org/packages/Microsoft.Azure.ServiceBus.EventProcessorHost&quot;&gt;Event Processor Host SDK&lt;/a&gt; (hosted in a stateless Service Fabric service) to process the events.&lt;/p&gt;
+    
+    </summary>
+    
+    
+      <category term="Azure Event Hubs" scheme="http://amolenk.com/tags/Azure-Event-Hubs/"/>
+    
+      <category term="Event Processor Host SDK" scheme="http://amolenk.com/tags/Event-Processor-Host-SDK/"/>
+    
+      <category term="Polly" scheme="http://amolenk.com/tags/Polly/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>DEVintersection Las Vegas 2016</title>
+    <link href="http://amolenk.com/2016/11/01/DEVIntersection-Las-Vegas-2016/"/>
+    <id>http://amolenk.com/2016/11/01/DEVIntersection-Las-Vegas-2016/</id>
+    <published>2016-11-01T15:43:22.000Z</published>
+    <updated>2016-11-19T20:43:29.000Z</updated>
+    
+    <content type="html">&lt;p&gt;I recently visited the DEVintersection conference in Las Vegas. 
+It’s a very nice conference with interesting workshops. I attended a two-day TypeScript / Angular2 workshop by John Papa and Dan Wahlin.&lt;/p&gt;
+&lt;p&gt;While there, Edwin van Wijk and I interviewed Scott Guthrie and Scott Hanselman for the &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; podcast.
+You can view these episodes at the following links:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Scott-Guthrie-Dev-Intersection-Las-Vegas&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Interview with Scott Guthrie at Dev Intersection - Las Vegas&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Scott-Hanselman-Dev-Intersection-Las-Vegas&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Interview with Scott Hanselman at Dev Intersection - Las Vegas&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;I recently visited the DEVintersection conference in Las Vegas. 
+It’s a very nice conference with interesting workshops. I attended a two
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="DEVintersection" scheme="http://amolenk.com/tags/DEVintersection/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Tech Days NL 2016</title>
+    <link href="http://amolenk.com/2016/10/21/Tech-Days-NL-2016/"/>
+    <id>http://amolenk.com/2016/10/21/Tech-Days-NL-2016/</id>
+    <published>2016-10-21T20:53:12.000Z</published>
+    <updated>2016-11-19T20:42:59.000Z</updated>
+    
+    <content type="html">&lt;p&gt;The videos of the two Tech Days NL 2016 talks I did are up on channel9:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/events/TechDays/Techdays-2016-The-Netherlands/All-Actor-Model-frameworks-are-not-created-equally&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;All Actor Model frameworks are not created equally&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/events/TechDays/Techdays-2016-The-Netherlands/Metering-as-a-Service-in-de-energie-sector-met-Azure&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Metering as a Service in de energie sector met Azure&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Both are in Dutch, and unfortunately there’s no sound after the first couple of slides of the second talk due to some technical difficulties :-(&lt;/p&gt;
+&lt;p&gt;At the conference I also had the chance to talk to both the opening and closing keynote speakers for the &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; podcast.
+You can view these episodes at the following links:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Interview-Corey-Sanders-TechDaysNL2016&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Interview with Corey Sanders at TechDays NL 2016&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Interview-David-Chappell-TechDaysNL2016&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Interview with David Chappell at TechDays NL 2016&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;The videos of the two Tech Days NL 2016 talks I did are up on channel9:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://channel9.msdn.com/events/TechDays/T
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Azure Service Fabric" scheme="http://amolenk.com/tags/Azure-Service-Fabric/"/>
+    
+      <category term="Actor Model" scheme="http://amolenk.com/tags/Actor-Model/"/>
+    
+      <category term="Tech Days NL" scheme="http://amolenk.com/tags/Tech-Days-NL/"/>
+    
+      <category term="Talk" scheme="http://amolenk.com/tags/Talk/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Service Fabric Actor Model lab</title>
+    <link href="http://amolenk.com/2016/10/01/Service-Fabric-Actor-Model-lab/"/>
+    <id>http://amolenk.com/2016/10/01/Service-Fabric-Actor-Model-lab/</id>
+    <published>2016-10-01T18:03:50.000Z</published>
+    <updated>2016-10-01T18:07:07.000Z</updated>
+    
+    <content type="html">&lt;p&gt;I’ve published an introduction lab for Service Fabric Actor Model at &lt;a href=&quot;https://github.com/amolenk/sf-actors-lab&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;https://github.com/amolenk/sf-actors-lab&lt;/a&gt;.
+The lab shows how to interact with actors and use reminders and events.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;I’ve published an introduction lab for Service Fabric Actor Model at &lt;a href=&quot;https://github.com/amolenk/sf-actors-lab&quot; target=&quot;_blank&quot; r
+    
+    </summary>
+    
+    
+      <category term="Azure Service Fabric" scheme="http://amolenk.com/tags/Azure-Service-Fabric/"/>
+    
+      <category term="Actor Model" scheme="http://amolenk.com/tags/Actor-Model/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Creating a Service Fabric Diff Application Package using PowerShell</title>
+    <link href="http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/"/>
+    <id>http://amolenk.com/2016/06/30/Creating-a-Service-Fabric-Diff-Application-Package-using-PowerShell/</id>
+    <published>2016-06-30T19:04:50.000Z</published>
+    <updated>2016-07-12T13:33:55.000Z</updated>
+    
+    <content type="html">&lt;p&gt;For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the build is run and (if succesful) a release is created and automatically deployed. 
+The release pipeline basically does two things: 1) make sure the environment is up to date using some ARM templates and 2) upgrade the Service Fabric application to the new version.&lt;/p&gt;
+&lt;p&gt;Upgrading the application requires that you increment the version numbers in the application and service manifests. 
+One way to deal with this is simply by incrementing the version number of each service whether or not it has actually been modified.
+You can do this by using an auto-generated build number as explained in &lt;a href=&quot;http://www.colinsalmcorner.com/post/continuous-deployment-of-service-fabric-apps-using-vsts-or-tfs&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Colin’s blogpost&lt;/a&gt;.
+In a lot of situations this works fine because Service Fabric allows for zero downtime deployments.&lt;/p&gt;
+&lt;p&gt;However, we needed to be sure that some services aren’t unnecessarily upgraded. 
+Some of the stateful services in the application maintain connections to external hardware devices. 
+We don’t want to interrupt these each time we need to roll-out a change in any of the other services.&lt;/p&gt;
+&lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
+&lt;p&gt;The solution we use for now is manually incrementing the version numbers of the modified services before we commit to the master branch
+(which is obviously not ideal because you must be careful not to make any mistakes).
+Fortunately, the Visual Studio tools help here a bit by providing a nice UI (right-click &lt;code&gt;Edit Manifest Versions...&lt;/code&gt; on a Service Fabric project).&lt;/p&gt;
+&lt;p&gt;Using the incremented versions numbers, we create a diff application package using a PowerShell script.
+A diff package contains only the files that changed between the last and current versions.
+It does however always contain the full application manifest and all service manifest files.
+You can read more on differential packages &lt;a href=&quot;https://azure.microsoft.com/en-us/documentation/articles/service-fabric-application-upgrade-advanced/#upgrade-with-a-diff-package&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;We prefer a diff package to a full application package because even though nothing may have changed in the code of a particular service, 
+the assemblies created by the build may have been changed when compared to the previous version.
+When this is the case and the version number is not incremented, Service Fabric will raise an error when you try to deploy the application.
+By using a diff package we are sure that we only include the assemblies for the services that have actual changes.&lt;/p&gt;
+&lt;p&gt;The diff package script performs the following steps:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Creates the output folder for the diff package. If it already exists it will be deleted, so watch out.&lt;/li&gt;
+&lt;li&gt;Retrieves application version from the cluster to verify that we really do need a diff package.&lt;/li&gt;
+&lt;li&gt;Includes the application manifest in the diff package.&lt;/li&gt;
+&lt;li&gt;Iterates over the service manifests and compares the version numbers with the version numbers of the currently deployed services.
+Code and config packages with higher version numbers are included in the diff package.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Before running the script, make sure you’re connected to your cluster using &lt;code&gt;Connect-ServiceFabricCluster&lt;/code&gt;.&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;&amp;lt;#
+.SYNOPSIS 
+Creates a diff package for deploying a Service Fabric application to a cluster.
+
+.DESCRIPTION
+This script creates a diff packages based on a given package directory and the current state of the cluster.
+
+.PARAMETER ApplicationPackagePath
+Path to the directory containing the original application package (input directory).
+
+.PARAMETER DiffPackagePath
+Path to the directory where to output the created diff application package.
+
+.PARAMETER ApplicationName
+Name of the Service Fabric application.
+
+#&amp;gt;
+
+Param
+(
+    [String]
+    $ApplicationPackagePath,
+
+    [String]
+    $DiffPackagePath,
+
+    [String]
+    $ApplicationName
+)
+
+###############################################################################
+# Create output directory.
+###############################################################################
+
+Write-Host &amp;quot;Creating diff package from $ApplicationPackagePath&amp;quot;
+
+# Ensure that the output directory for the Diff package exists.
+if (Test-Path $DiffPackagePath)
+{
+    Remove-Item -Path $DiffPackagePath\* -Force -Recurse | Out-Null
+}
+
+New-Item -ItemType Directory -Path $DiffPackagePath
+
+###############################################################################
+# Check that the new version number is higher than the currently running application.
+###############################################################################
+
+# Try to get the application info from the cluster.
+$application = Get-ServiceFabricApplication -ApplicationName $ApplicationName
+
+# If we&amp;apos;ve got a result, a version of the application is already running.
+if ($application -ne $null) {
+
+    Write-Host &amp;quot;Detected version $($application.ApplicationTypeVersion) of application running on cluster&amp;quot;
+
+} else {
+
+    Write-Host &amp;quot;No current version detected. Using full application package.&amp;quot;
+
+    Copy-Item -Path (Join-Path $ApplicationPackagePath &amp;apos;*&amp;apos;) -Destination $DiffPackagePath -Recurse
+    exit
+}
+
+# Load the application manifest.
+$applicationManifestPath = Join-Path $ApplicationPackagePath &amp;quot;ApplicationManifest.xml&amp;quot;
+$appManifestXml = [xml] (Get-Content $applicationManifestPath)
+if (!$appManifestXml)
+{
+    $errMsg = &amp;quot;Failed to load application manifest XML.&amp;quot;
+    throw $errMsg
+}
+
+$applicationTypeName = $appManifestXml.ApplicationManifest.ApplicationTypeName
+
+###############################################################################
+# Create the diff package
+###############################################################################
+
+Copy-Item -Path $applicationManifestPath -Destination $DiffPackagePath
+
+# Iterate over service manifests. For each service, verify whether it must be part of the diff package.
+# If not, remove the service files from the diff package directory.
+$appManifestXml.ApplicationManifest.ChildNodes | foreach {
+
+    if ($_.LocalName -eq &amp;apos;ServiceManifestImport&amp;apos;) {
+
+        $serviceManifestName = $_.ServiceManifestRef.ServiceManifestName
+        $serviceManifestVersion = $_.ServiceManifestRef.ServiceManifestVersion
+        $servicePath = [io.path]::Combine($ApplicationPackagePath, $serviceManifestName)
+        $serviceManifestPath = [io.path]::Combine($servicePath, &amp;apos;ServiceManifest.xml&amp;apos;) 
+
+        # Load the new service manifest XML.
+        $newServiceManifest = [xml] (Get-Content $serviceManifestPath)
+        if (!$newServiceManifest)
+        {
+            $errMsg = &amp;quot;Failed to load service manifest XML for $serviceManifestName.&amp;quot;
+            throw $errMsg
+        }
+
+        $newCodePackageVersion = $newServiceManifest.ServiceManifest.CodePackage.Version
+        $newConfigPackageVersion = $newServiceManifest.ServiceManifest.ConfigPackage.Version
+
+        # Load the old service manifest.
+        $oldServiceManifest = [xml] (Get-ServiceFabricServiceManifest -ApplicationTypeName $applicationTypeName -ApplicationTypeVersion $application.ApplicationTypeVersion -ServiceManifestName $serviceManifestName -ErrorAction SilentlyContinue)
+        $oldCodePackageVersion = &amp;apos;0.0.0&amp;apos;;
+        $oldConfigPackageVersion = &amp;apos;0.0.0&amp;apos;;
+
+        if ($oldServiceManifest)
+        {
+            $oldCodePackageVersion = $oldServiceManifest.ServiceManifest.CodePackage.Version
+            $oldConfigPackageVersion = $oldServiceManifest.ServiceManifest.ConfigPackage.Version
+        }
+
+        # Create the destination directory
+        $diffServicePath = Join-Path $DiffPackagePath $serviceManifestName
+        New-Item -ItemType Directory -Path $diffServicePath | Out-Null
+
+        # Copy the service manifest
+        Copy-Item -Path $serviceManifestPath -Destination $diffServicePath
+
+        # Copy the CodePackage if it is updated
+        if ([System.Version]$newCodePackageVersion -gt [System.Version]$oldCodePackageVersion) {
+
+            Write-Host &amp;quot;Including code package for service $serviceManifestName (version $serviceManifestVersion).&amp;quot;
+
+            Copy-Item -Path (Join-Path $servicePath &amp;apos;Code&amp;apos;) -Destination $diffServicePath -Recurse
+        }
+        else {
+            Write-Host &amp;quot;Excluding code package for service $serviceManifestName (version $serviceManifestVersion).&amp;quot;
+        }
+
+        # Copy the Config if it is updated
+        if ([System.Version]$newConfigPackageVersion -gt [System.Version]$oldConfigPackageVersion) {
+
+            Write-Host &amp;quot;Including config package for service $serviceManifestName (version $serviceManifestVersion).&amp;quot;
+
+            Copy-Item -Path (Join-Path $servicePath &amp;apos;Config&amp;apos;) -Destination $diffServicePath -Recurse
+        }
+        else {
+            Write-Host &amp;quot;Excluding config package for service $serviceManifestName (version $serviceManifestVersion).&amp;quot;
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;For a Service Fabric project I’ve been working on, the project team has implemented a release management pipeline in Visual Studio Team Services.
+When a commit is pushed to the master branch, the build is run and (if succesful) a release is created and automatically deployed. 
+The release pipeline basically does two things: 1) make sure the environment is up to date using some ARM templates and 2) upgrade the Service Fabric application to the new version.&lt;/p&gt;
+&lt;p&gt;Upgrading the application requires that you increment the version numbers in the application and service manifests. 
+One way to deal with this is simply by incrementing the version number of each service whether or not it has actually been modified.
+You can do this by using an auto-generated build number as explained in &lt;a href=&quot;http://www.colinsalmcorner.com/post/continuous-deployment-of-service-fabric-apps-using-vsts-or-tfs&quot;&gt;Colin’s blogpost&lt;/a&gt;.
+In a lot of situations this works fine because Service Fabric allows for zero downtime deployments.&lt;/p&gt;
+&lt;p&gt;However, we needed to be sure that some services aren’t unnecessarily upgraded. 
+Some of the stateful services in the application maintain connections to external hardware devices. 
+We don’t want to interrupt these each time we need to roll-out a change in any of the other services.&lt;/p&gt;
+    
+    </summary>
+    
+    
+      <category term="Azure Service Fabric" scheme="http://amolenk.com/tags/Azure-Service-Fabric/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Deploying a Service Fabric cluster in an existing VNET</title>
+    <link href="http://amolenk.com/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/"/>
+    <id>http://amolenk.com/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/</id>
+    <published>2016-06-23T09:39:27.000Z</published>
+    <updated>2016-06-22T15:36:02.000Z</updated>
+    
+    <content type="html">&lt;p&gt;When you create a Service Fabric cluster using the Azure Portal, there is no way to select an existing Virtual Network (VNET) to host the cluster in. Usually there is no harm in running the cluster in its own VNET. However, when you’ve got an existing VNET to support integration with a third party using a VPN tunnel, this may become a problem. Reconfiguring / recreating the VPN tunnel whenever a new cluster is deployed is not an ideal situation.&lt;/p&gt;
+&lt;p&gt;Fortunately, it’s relatively easy to make some changes to the ARM template used by the Azure Portal to support an existing VNET.&lt;/p&gt;
+&lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
+&lt;p&gt;First, you need to get the ARM template. When creating a Service Fabric cluster in the Azure Portal, you can choose to download the generated template in the last step of the wizard:&lt;/p&gt;
+&lt;img src=&quot;/2016/06/23/Deploying-a-Service-Fabric-cluster-in-an-existing-VNET/DownloadTemplate.png&quot; alt=&quot;DownloadTemplate.png&quot; title=&quot;&quot;&gt;
+&lt;p&gt;Now all you need to do is remove some stuff from the template we don’t need.&lt;/p&gt;
+&lt;p&gt;First, delete the resource for the VNET. You can find the relevant resource by looking at its resource type, which should be &lt;code&gt;Microsoft.Network/virtualNetworks&lt;/code&gt;. 
+It should look something like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;{
+  &amp;quot;apiVersion&amp;quot;: &amp;quot;[variables(&amp;apos;vNetApiVersion&amp;apos;)]&amp;quot;,
+  &amp;quot;type&amp;quot;: &amp;quot;Microsoft.Network/virtualNetworks&amp;quot;,
+  &amp;quot;name&amp;quot;: &amp;quot;[parameters(&amp;apos;virtualNetworkName&amp;apos;)]&amp;quot;,
+  &amp;quot;location&amp;quot;: &amp;quot;[parameters(&amp;apos;computeLocation&amp;apos;)]&amp;quot;,
+  &amp;quot;properties&amp;quot;: {
+    &amp;quot;addressSpace&amp;quot;: {
+      &amp;quot;addressPrefixes&amp;quot;: [
+        &amp;quot;[parameters(&amp;apos;addressPrefix&amp;apos;)]&amp;quot;
+      ]
+    },
+    &amp;quot;subnets&amp;quot;: [
+      {
+        &amp;quot;name&amp;quot;: &amp;quot;[parameters(&amp;apos;subnet0Name&amp;apos;)]&amp;quot;,
+        &amp;quot;properties&amp;quot;: {
+          &amp;quot;addressPrefix&amp;quot;: &amp;quot;[parameters(&amp;apos;subnet0Prefix&amp;apos;)]&amp;quot;
+        }
+      }
+    ]
+  },
+  &amp;quot;tags&amp;quot;: {
+    &amp;quot;resourceType&amp;quot;: &amp;quot;Service Fabric&amp;quot;,
+    &amp;quot;clusterName&amp;quot;: &amp;quot;[parameters(&amp;apos;clusterName&amp;apos;)]&amp;quot;
+  }
+},
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;You can remove that entire resource from the template.&lt;/p&gt;
+&lt;p&gt;Next, you should remove any parameters that were only used by the VNET resource.
+Both &lt;code&gt;subnet0Prefix&lt;/code&gt; and &lt;code&gt;addressPrefix&lt;/code&gt; can be safely removed.&lt;/p&gt;
+&lt;p&gt;Now you can run the template to deploy the cluster in an existing VNET by configuring the following parameters:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;virtualNetworkName: Name of the VNET you want to use.&lt;/li&gt;
+&lt;li&gt;subnet0Name: Name of an existing VNET subnet where you want to provision the cluster in.&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;When you create a Service Fabric cluster using the Azure Portal, there is no way to select an existing Virtual Network (VNET) to host the cluster in. Usually there is no harm in running the cluster in its own VNET. However, when you’ve got an existing VNET to support integration with a third party using a VPN tunnel, this may become a problem. Reconfiguring / recreating the VPN tunnel whenever a new cluster is deployed is not an ideal situation.&lt;/p&gt;
+&lt;p&gt;Fortunately, it’s relatively easy to make some changes to the ARM template used by the Azure Portal to support an existing VNET.&lt;/p&gt;
+    
+    </summary>
+    
+    
+      <category term="Azure Resource Manager" scheme="http://amolenk.com/tags/Azure-Resource-Manager/"/>
+    
+      <category term="Azure Service Fabric" scheme="http://amolenk.com/tags/Azure-Service-Fabric/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Calling an AAD protected API using AutoRest</title>
+    <link href="http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/"/>
+    <id>http://amolenk.com/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/</id>
+    <published>2016-04-24T15:42:19.000Z</published>
+    <updated>2016-04-29T06:26:51.000Z</updated>
+    
+    <content type="html">&lt;p&gt;In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service. It supports many types of authentication providers, but for this post I’ll use Azure Active Directory. Once that is set up,  I’ll show how to generate a client library for the API using AutoRest. The generated client authenticates with the API App by using a bearer token that is retrieved from Azure AD by providing application identity (service principal) credentials.&lt;/p&gt;
+&lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
+&lt;h2 id=&quot;Register-applications-in-Azure-AD&quot;&gt;&lt;a href=&quot;#Register-applications-in-Azure-AD&quot; class=&quot;headerlink&quot; title=&quot;Register applications in Azure AD&quot;&gt;&lt;/a&gt;Register applications in Azure AD&lt;/h2&gt;&lt;p&gt;You’ll use two Azure AD applications: one for the protected API app and one for the calling app. Follow these steps for each application to add them to Azure AD:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;In the Classic Azure portal, navigate to the &lt;strong&gt;Applications&lt;/strong&gt; tab of your Azure AD tenant. &lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;In the bottom toolbar, click &lt;strong&gt;Add&lt;/strong&gt; to add a new application to the directory.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;In the pop-up window that opens, select &lt;strong&gt;Add an application my organization is developing&lt;/strong&gt;:&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard01.png&quot; alt=&quot;AddApplicationWizard01.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Enter the name of your API / application and make sure &lt;strong&gt;Web Application and/or Web API&lt;/strong&gt; is selected:&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard02.png&quot; alt=&quot;AddApplicationWizard02.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Enter the URL of the API / application. You can use the same URL as the App ID URI.    &lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AddApplicationWizard03.png&quot; alt=&quot;AddApplicationWizard03.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;When the application has been added, navigate to the &lt;strong&gt;Configure&lt;/strong&gt; tab and notice the generated &lt;strong&gt;client id&lt;/strong&gt;. You’ll need the client id later on.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Follow the above steps for both applications, so that you’ve got an protected AD app and a caller AD app set up.&lt;/p&gt;
+&lt;h2 id=&quot;Set-permissions-for-caller-AD-application&quot;&gt;&lt;a href=&quot;#Set-permissions-for-caller-AD-application&quot; class=&quot;headerlink&quot; title=&quot;Set permissions for caller AD application&quot;&gt;&lt;/a&gt;Set permissions for caller AD application&lt;/h2&gt;&lt;p&gt;The caller AD application requires permission to access the protected AD application. &lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;On the &lt;strong&gt;Configure&lt;/strong&gt; tab for the AD application representing the caller, scroll down to &lt;strong&gt;Permissions to other applications&lt;/strong&gt; and click on &lt;strong&gt;Add application&lt;/strong&gt;.&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions01.png&quot; alt=&quot;SetPermissions01.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Select &lt;strong&gt;All Apps&lt;/strong&gt; and click on the checkmark button in the upper-right corner.&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions02.png&quot; alt=&quot;SetPermissions02.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Select the protected API and click on the &lt;strong&gt;Complete&lt;/strong&gt; checkmark to close the dialog.&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions03.png&quot; alt=&quot;SetPermissions03.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Click on &lt;strong&gt;Delegated Permissions&lt;/strong&gt; and select the checkbox to access the protected AD application:&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/SetPermissions04.png&quot; alt=&quot;SetPermissions04.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;The caller AD application is now granted access to the protected AD application.&lt;/p&gt;
+&lt;h2 id=&quot;Generate-access-key-for-caller-AD-application&quot;&gt;&lt;a href=&quot;#Generate-access-key-for-caller-AD-application&quot; class=&quot;headerlink&quot; title=&quot;Generate access key for caller AD application&quot;&gt;&lt;/a&gt;Generate access key for caller AD application&lt;/h2&gt;&lt;p&gt;You also need to generate an access key (client secret) which is used to authenticate the caller application when requesting a token from Azure AD.&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;On the &lt;strong&gt;Configure&lt;/strong&gt; tab for the caller AD application, scroll down to &lt;strong&gt;Keys&lt;/strong&gt; and select a duration:&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/AccessKey01.png&quot; alt=&quot;AccessKey01.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Click &lt;strong&gt;Save&lt;/strong&gt; in the bottom toolbar to generate the key value. Store the value somewhere where you can retrieve it later on.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&quot;Setup-authentication-for-the-protected-API&quot;&gt;&lt;a href=&quot;#Setup-authentication-for-the-protected-API&quot; class=&quot;headerlink&quot; title=&quot;Setup authentication for the protected API&quot;&gt;&lt;/a&gt;Setup authentication for the protected API&lt;/h2&gt;&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;In the (new) Azure portal, go to the &lt;strong&gt;Settings&lt;/strong&gt; of your Api App and select &lt;strong&gt;Authentication/Authorization&lt;/strong&gt;. &lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;In the &lt;strong&gt;Authentication/Authorization&lt;/strong&gt; blade, turn on &lt;strong&gt;App Service Authentication&lt;/strong&gt; and select &lt;strong&gt;Azure Active Directory&lt;/strong&gt; as the authentication provider.&lt;/p&gt;
+ &lt;img src=&quot;/2016/04/24/Calling-an-AAD-protected-API-using-AutoRest/ApiAppAuth01.png&quot; alt=&quot;ApiAppAuth01.png&quot; title=&quot;&quot;&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;If the Azure AD you’re using is the default Azure AD instance for the subscription, you can simply select the Express management mode and select the application from here. Otherwise, select Advanced. You’ll need to enter the client id of the protected API as well as the &lt;strong&gt;Issuer URL&lt;/strong&gt; of the Azure AD instance.&lt;/p&gt;
+&lt;p&gt; To retrieve the Issuer URL:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Navigate to your Azure AD tenant in the Classic Azure portal.&lt;/li&gt;
+&lt;li&gt;In the bottom toolbar, click on &lt;strong&gt;View Endpoints&lt;/strong&gt;. &lt;/li&gt;
+&lt;li&gt;Copy the link to the Federation Metadata Document and paste the URL in a new browser window.&lt;/li&gt;
+&lt;li&gt;In the XML document that is displayed, the &lt;strong&gt;Issuer URL&lt;/strong&gt; is the value of the entityId attribute of the root EntityDescriptor element (e.g. &lt;code&gt;https://sts.windows.net/20ef1a8a-****-****-****-************&lt;/code&gt;)).    &lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Click OK and don’t forget the save your changes on the &lt;strong&gt;Authentication / Authorization&lt;/strong&gt; blade. &lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Your Api App is now protected and you can test this by opening up a browser and navigating to the Api App. You should see a sign-in page. If you’re directly taken to the service you may still be signed in to your Azure AD. Start a new browser in Private / Incognito mode to make sure you’re not already signed in.&lt;/p&gt;
+&lt;h2 id=&quot;Generate-a-client-library-for-the-API&quot;&gt;&lt;a href=&quot;#Generate-a-client-library-for-the-API&quot; class=&quot;headerlink&quot; title=&quot;Generate a client library for the API&quot;&gt;&lt;/a&gt;Generate a client library for the API&lt;/h2&gt;&lt;p&gt;Because the API App exposes a &lt;a href=&quot;http://swagger.io&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Swagger&lt;/a&gt; endpoint, you can use &lt;a href=&quot;https://github.com/Azure/autorest&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;AutoRest&lt;/a&gt; to generate a client library to call the API. &lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;autorest -Input http://localhost:8282/swagger/docs/v1 -Namespace Amolenk.ApiApp -ClientName ApiClient -AddCredentials
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;This command will generate some C# files that you must add to the calling application. In addition, you must also add the &lt;strong&gt;Microsoft.Rest.ClientRuntime.Azure.Authentication&lt;/strong&gt; NuGet package (at the time of writing, you should select the 2.0.1 prerelease package). This package provides ADAL based authentication for the generated client library. Adding the NuGet package will also install the &lt;strong&gt;Microsoft.Rest.ClientRuntime&lt;/strong&gt; NuGet package which is required to be able to compile the generated code.&lt;/p&gt;
+&lt;p&gt;Notice that I’ve used the &lt;strong&gt;-AddCredentials&lt;/strong&gt; flag when running AutoRest. This tells AutoRest to include a &lt;strong&gt;ServiceClientCredentials&lt;/strong&gt; property and constructor parameter in the generated client. The &lt;strong&gt;TokenCredentials&lt;/strong&gt; class in the &lt;strong&gt;Microsoft.Rest.ClientRuntime&lt;/strong&gt; package extends the &lt;strong&gt;ServiceClientCredentials&lt;/strong&gt; class and can be used for OAuth authentication. Additionally, the &lt;strong&gt;Microsoft.Rest.ClientRuntime.Azure.Authentication&lt;/strong&gt; package supports both username/password and service principal login scenarios for Azure AD.&lt;/p&gt;
+&lt;p&gt;As this is an application to application scenario, the calling app will use service principal credentials to authenticate with the protected API.&lt;/p&gt;
+&lt;h2 id=&quot;Call-the-protected-API&quot;&gt;&lt;a href=&quot;#Call-the-protected-API&quot; class=&quot;headerlink&quot; title=&quot;Call the protected API&quot;&gt;&lt;/a&gt;Call the protected API&lt;/h2&gt;&lt;p&gt;To call the protected API, you need the following information:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;The &lt;strong&gt;client ids&lt;/strong&gt; of both the protected and caller apps.&lt;/li&gt;
+&lt;li&gt;The generated &lt;strong&gt;access key&lt;/strong&gt; of the calling app.&lt;/li&gt;
+&lt;li&gt;The &lt;strong&gt;Authority URL&lt;/strong&gt;, which contains the name of the Azure AD tenant in which you provisioned your apps. The format should be &lt;a href=&quot;https://login.windows.net/tenant-name.onmicrosoft.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;https://login.windows.net/tenant-name.onmicrosoft.com&lt;/a&gt;. &lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Using this information, you can use the code below to access the protected app:&lt;/p&gt;
+&lt;figure class=&quot;highlight cs&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;9&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;10&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;11&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;12&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;13&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;14&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;15&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; clientCredential = &lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt; ClientCredential(&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    callerAppClientId, callerAppAccessKey);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;AuthenticationContext context = &lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt; AuthenticationContext(authorityUrl);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;AuthenticationResult authenticationResult = context.AcquireToken(&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    protectedAppClientId, clientCredential);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;ApplicationTokenProvider tokenProvider = &lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt; ApplicationTokenProvider(&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    context, protectedAppClientId, clientCredential, authenticationResult);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;TokenCredentials creds = &lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt; TokenCredentials(tokenProvider);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;comment&quot;&gt;// DeviceManagementClient class is generated using AutoRest&lt;/span&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;span class=&quot;keyword&quot;&gt;var&lt;/span&gt; client = &lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt; DeviceManagementClient(creds);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;client.BaseUri = &lt;span class=&quot;keyword&quot;&gt;new&lt;/span&gt; Uri(&lt;span class=&quot;string&quot;&gt;&quot;https://amolenk-devicemanagementapi.azurewebsites.net&quot;&lt;/span&gt;);&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;client.Device.SayHelloAsync();&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;On a side note: the &lt;strong&gt;ApplicationTokenProvider&lt;/strong&gt; used in the example also exposes a &lt;strong&gt;LoginSilentAsync&lt;/strong&gt; method which directly returns a &lt;strong&gt;ServiceClientCredentials&lt;/strong&gt; instance and would be nicer to use than the code above. Unfortunately though, there’s no way to pass the client id of the protected API because &lt;strong&gt;LoginSilentAsync&lt;/strong&gt; requires the audience to be of type &lt;strong&gt;Uri&lt;/strong&gt;, while a client id is a &lt;strong&gt;string&lt;/strong&gt;. I’ve opened an issue for this at &lt;a href=&quot;https://github.com/Azure/autorest/issues/835&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;https://github.com/Azure/autorest/issues/835&lt;/a&gt;.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;In this post I’ll demonstrate how to protect an Azure API App by using App Service authentication; a turn key solution for  providing authentication and authorization to any kind of Azure App Service. It supports many types of authentication providers, but for this post I’ll use Azure Active Directory. Once that is set up,  I’ll show how to generate a client library for the API using AutoRest. The generated client authenticates with the API App by using a bearer token that is retrieved from Azure AD by providing application identity (service principal) credentials.&lt;/p&gt;
+    
+    </summary>
+    
+    
+      <category term="Azure Active Directory" scheme="http://amolenk.com/tags/Azure-Active-Directory/"/>
+    
+      <category term="Azure App Services" scheme="http://amolenk.com/tags/Azure-App-Services/"/>
+    
+      <category term="AutoRest" scheme="http://amolenk.com/tags/AutoRest/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Started Dutch Azure Meetup</title>
+    <link href="http://amolenk.com/2016/04/15/Started-Dutch-Azure-Meetup/"/>
+    <id>http://amolenk.com/2016/04/15/Started-Dutch-Azure-Meetup/</id>
+    <published>2016-04-15T12:00:00.000Z</published>
+    <updated>2016-04-29T06:50:13.000Z</updated>
+    
+    <content type="html">&lt;p&gt;&lt;a href=&quot;http://www.meetup.com/Dutch-Azure-Meetup/&quot; target=&quot;_blank&quot;&gt;&lt;img class=&quot;wp-image-372 alignleft&quot; src=&quot;https://blogs.infosupport.com/wp-content/uploads/2016/04/DutchAzureMeetupLogo.png&quot; alt=&quot;Logo Meetup&quot; width=&quot;176&quot; height=&quot;176&quot;&gt;&lt;/a&gt;
+This week &lt;a href=&quot;http://blog.olandese.nl/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Marco Mansi&lt;/a&gt;, &lt;a href=&quot;https://pascalnaber.wordpress.com/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;Pascal Naber&lt;/a&gt; and I started the Dutch Azure Meetup: &lt;a href=&quot;http://www.meetup.com/Dutch-Azure-Meetup/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;http://www.meetup.com/Dutch-Azure-Meetup/&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Azure offers a lot of services and features, and this grows almost daily. It is hard to be up-to-date on all the Azure features. This meetup gives you the opportunity to learn about Azure in a practical way.&lt;/p&gt;
+&lt;p&gt;We want to offer a platform for Azure enthusiasts, where you can get hands-on with the technology, talk with and learn from each other. The meetup will not handle customer cases in theory but instead we talk about deep technical details, real world experiences and best practices.&lt;/p&gt;
+&lt;p&gt;Our &lt;a href=&quot;http://www.meetup.com/Dutch-Azure-Meetup/events/230342112/&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;first meetup&lt;/a&gt; is planned for the 2&lt;sup&gt;nd&lt;/sup&gt; of June and is all about Azure Container Service:&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Join the first Dutch Azure Meetup!&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Docker is taking the world by storm and Microsoft Azure Container Service is where Azure and Docker meet!&lt;/p&gt;
+&lt;p&gt;During this first meetup Mark van Holsteijn will give you a brief introduction into Docker and Microsoft Container Service. After which you will have ample opportunity to get hands-on with Docker, Marathon, Azure and &lt;a href=&quot;http://asp.net&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;ASP.NET&lt;/a&gt; core.&lt;/p&gt;
+&lt;p&gt;We will show you how Azure Container Service provides an excellent platform for creating cross-cloud applications.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;About the speaker&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Mark van Holsteijn is Principal Consultant at Xebia specialized in cloud software architectures with open-source technologies.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Agenda&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;18:00: Dinner&lt;/p&gt;
+&lt;p&gt;18:45: Word of welcome Dutch Azure Meetup&lt;/p&gt;
+&lt;p&gt;18:50: Azure Container Service (by Mark van Holsteijn)&lt;/p&gt;
+&lt;p&gt;19:30: Hands-on with Docker and Azure Container Service&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;&lt;a href=&quot;http://www.meetup.com/Dutch-Azure-Meetup/&quot; target=&quot;_blank&quot;&gt;&lt;img class=&quot;wp-image-372 alignleft&quot; src=&quot;https://blogs.infosupport.co
+    
+    </summary>
+    
+    
+      <category term="Azure" scheme="http://amolenk.com/tags/Azure/"/>
+    
+      <category term="Meetup" scheme="http://amolenk.com/tags/Meetup/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Microsoft Build 2016 (Dutch)</title>
+    <link href="http://amolenk.com/2016/04/02/Microsoft%20Build%202016%20(Dutch)/"/>
+    <id>http://amolenk.com/2016/04/02/Microsoft Build 2016 (Dutch)/</id>
+    <published>2016-04-02T06:39:34.000Z</published>
+    <updated>2016-07-17T13:28:01.000Z</updated>
+    
+    <content type="html">&lt;p&gt;Dit jaar zijn we met zes Info Supporters afgereisd naar San Francisco voor de Build conferentie. De keynote op dag 1 stond vooral in het teken van Windows 10 (met als coolste aankondiging Bash shell op Windows), X-Box, Hololens en de hele ‘conversation as a platform’ strategie met de Cortana Intellligence Suite. Onderdeel van deze suite is Cognitive Services, een verzameling van intelligente APIs waar je oplossingen mee kunt bouwen die natuurlijke communicatie methodes ondersteunen zoals bijvoorbeeld stemherkenning. In &lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Language-Understanding-Intelligent-Service&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix aflevering 34&lt;/a&gt; gebruiken we Cognitive Services om queries in natuurlijke taal te ondersteunen.
+&lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
+Dag 2 was meer gericht op de hardcore developers. Scott Guthrie opende de keynote met als onderwerp ‘building the intelligent cloud’. Altijd weer leuk om te zien welke cijfers Guthrie laat zien over Azure. Zo worden er inmiddels maar liefst meer dan 1.4 miljoen SQL databases gehost in  Azure. Ook opvallend is de snelle groei van de Azure data centers. Op dit moment zijn er 30 unieke Azure regio’s over de hele wereld (meer dan de data centers van AWS en Google Cloud bij elkaar opgeteld). Ter vergelijking; ten tijde van de Build 2015 conferentie waren er 19 regio’s beschikbaar.&lt;/p&gt;
+&lt;p&gt;Voor de oplettende kijker zat er nog een foutje in de keynote. Azure Container Service (ACS) maakt het mogelijk om op eenvoudige wijze containers te draaien in Azure. Hierbij wordt gebruik gemaakt van bestaande open source oplossingen zoals Docker en Apache Mesos. ACS biedt echter nog geen ondersteuning voor Windows containers zoals in de keynote gemeld werd. Het is nog onduidelijk hoe deze ondersteuning eruit gaat zien, maar we zullen minstens moeten wachten totdat Windows Server 2016 beschikbaar is. We hebben nog geprobeerd iemand dit te laten bevestigen op camera, maar dat is niet gelukt.&lt;/p&gt;
+&lt;p&gt;Een compleet nieuwe Azure dienst die is aangekondigd is Azure Functions. Dit is de tegenhanger van het Lambda framework van Amazon. Met Azure Functions kun je ‘on-demand’ code draaien die reageert op events. Wat dat betreft lijkt het erg op de Web Jobs functionaliteit die nu al onderdeel is van Azure App Services. Er is echter een groot verschil in het prijsmodel: bij Azure Functions hoef je alleen te betalen voor de compute resources terwijl de code events aan het afhandelen is.
+Microsoft heeft ook de publieke beschikbaarheid van Azure Service Fabric aangekondigd – which is awesome! Service Fabric is een gedistribueerd applicatie platform dat het mogelijk maakt om applicaties te hosten die zijn opgebouwd uit microservices. Mark Fussell, program manager in het core Azure team, was beschikbaar om voor onze dotnetFlix camera te verschijnen. Het gesprek is te zien in &lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Azure-Service-Fabric-with-Mark-Fussell&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix aflevering 35&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Zoals verwacht kwam ook de acquisitie van Xamarin ter sprake. Na een korte demo van Miguel De Icaza werd aangekondigd dat Xamarin voor Visual Studio tegenwoordig kostenloos te gebruiken is. En dan niet alleen voor de betaalde Visual Studio versies, maar zelfs voor Visual Studio Community Edition. Het mag duidelijk zijn dat Microsoft graag zoveel mogelijk ontwikkelaars op hun platform ziet, ook als die Android en iOS applicaties ontwikkelen. De Xamarin runtime wordt ook open source, wat de positie van .NET als een open platform versterkt.&lt;/p&gt;
+&lt;p&gt;Ondanks dat er niet heel veel nieuwe zaken aangekondigd zijn zien we wel steeds meer diensten die volwassen worden en publiekelijk beschikbaar zijn. Dit betekent dan ook dat we deze diensten steeds meer voor onze klanten in productie kunnen gaan inzetten.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;Dit jaar zijn we met zes Info Supporters afgereisd naar San Francisco voor de Build conferentie. De keynote op dag 1 stond vooral in het teken van Windows 10 (met als coolste aankondiging Bash shell op Windows), X-Box, Hololens en de hele ‘conversation as a platform’ strategie met de Cortana Intellligence Suite. Onderdeel van deze suite is Cognitive Services, een verzameling van intelligente APIs waar je oplossingen mee kunt bouwen die natuurlijke communicatie methodes ondersteunen zoals bijvoorbeeld stemherkenning. In &lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Language-Understanding-Intelligent-Service&quot;&gt;dotnetFlix aflevering 34&lt;/a&gt; gebruiken we Cognitive Services om queries in natuurlijke taal te ondersteunen.
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Microsoft Build 2016" scheme="http://amolenk.com/tags/Microsoft-Build-2016/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Interview with Mark Fussell</title>
+    <link href="http://amolenk.com/2016/04/01/Interview-with-Mark-Fussell/"/>
+    <id>http://amolenk.com/2016/04/01/Interview-with-Mark-Fussell/</id>
+    <published>2016-04-01T06:39:34.000Z</published>
+    <updated>2016-07-17T13:22:56.000Z</updated>
+    
+    <content type="html">&lt;p&gt;At //Build 2016 I had the chance to talk to Mark Fussell, a principal program manager in the core Azure team about the GA release of Azure Service Fabric.&lt;/p&gt;
+&lt;p&gt;You can watch the video &lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Azure-Service-Fabric-with-Mark-Fussell&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;At //Build 2016 I had the chance to talk to Mark Fussell, a principal program manager in the core Azure team about the GA release of Azur
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Azure Service Fabric" scheme="http://amolenk.com/tags/Azure-Service-Fabric/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Azure Container Services with Saurya Das</title>
+    <link href="http://amolenk.com/2016/03/31/Azure%20Container%20Services%20with%20Saurya%20Das/"/>
+    <id>http://amolenk.com/2016/03/31/Azure Container Services with Saurya Das/</id>
+    <published>2016-03-31T10:00:00.000Z</published>
+    <updated>2016-07-17T13:16:37.000Z</updated>
+    
+    <content type="html">&lt;p&gt;At the Microsoft //Build conference in San Francisco we talked with Saurya Das, a Program Manager at Microsoft working in the Azure Linux Compute team. In this interview, Saurya talks about Azure Container Services.&lt;/p&gt;
+&lt;p&gt;Je kunt de video &lt;a href=&quot;https://www.youtube.com/watch?v=7jCS4PcikCs&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;hier&lt;/a&gt; bekijken.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;At the Microsoft //Build conference in San Francisco we talked with Saurya Das, a Program Manager at Microsoft working in the Azure Linux
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Azure Container Services" scheme="http://amolenk.com/tags/Azure-Container-Services/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Microsoft Bot Framework (Dutch)</title>
+    <link href="http://amolenk.com/2016/03/31/Microsoft-Bot-Framework-(Dutch)/"/>
+    <id>http://amolenk.com/2016/03/31/Microsoft-Bot-Framework-(Dutch)/</id>
+    <published>2016-03-31T09:39:34.000Z</published>
+    <updated>2016-07-17T12:51:21.000Z</updated>
+    
+    <content type="html">&lt;p&gt;Op de //Build conferentie in San Francisco is het Microsoft Bot Framework geïntroduceerd. In deze &lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering laat ik zien hoe eenvoudig het is om met dit framework slimme bots te bouwen.&lt;/p&gt;
+&lt;p&gt;Je kunt de video &lt;a href=&quot;https://channel9.msdn.com/Series/dotnetflix/Microsoft-Bot-Framework&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;hier&lt;/a&gt; bekijken.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;Op de //Build conferentie in San Francisco is het Microsoft Bot Framework geïntroduceerd. In deze &lt;a href=&quot;https://channel9.msdn.com/Seri
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Bot Framework" scheme="http://amolenk.com/tags/Bot-Framework/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Testen van een WebAPI met SpecFlow (Dutch)</title>
+    <link href="http://amolenk.com/2016/01/05/Testen%20van%20een%20WebAPI%20met%20SpecFlow%20(Dutch)/"/>
+    <id>http://amolenk.com/2016/01/05/Testen van een WebAPI met SpecFlow (Dutch)/</id>
+    <published>2016-01-05T11:00:00.000Z</published>
+    <updated>2016-07-22T18:54:21.000Z</updated>
+    
+    <content type="html">&lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering laat ik zien hoe ik een WebAPI test met behulp van SpecFlow.&lt;/p&gt;
+&lt;p&gt;Je kunt de video &lt;a href=&quot;https://www.youtube.com/watch?v=pX9S_nTj34w&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;hier&lt;/a&gt; bekijken.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering laat ik zien hoe ik een WebAPI test 
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Web API" scheme="http://amolenk.com/tags/Web-API/"/>
+    
+      <category term="SpecFlow" scheme="http://amolenk.com/tags/SpecFlow/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Building a Custom Event Store on Azure (Dutch)</title>
+    <link href="http://amolenk.com/2015/06/20/Building%20a%20Custom%20Event%20Store%20on%20Azure%20(Dutch)/"/>
+    <id>http://amolenk.com/2015/06/20/Building a Custom Event Store on Azure (Dutch)/</id>
+    <published>2015-06-20T10:00:00.000Z</published>
+    <updated>2016-07-22T18:54:21.000Z</updated>
+    
+    <content type="html">&lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering vertel ik hoe ik verschillende Azure services heb gebruikt voor het implementeren van een Event Store voor het opslaan van state in de vorm van een lijst van events die zijn opgetreden.&lt;/p&gt;
+&lt;p&gt;Je kunt de video &lt;a href=&quot;https://www.youtube.com/watch?v=fmP8zMGAibs&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;hier&lt;/a&gt; bekijken.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering vertel ik hoe ik verschillende Azure
+    
+    </summary>
+    
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Azure Service Bus" scheme="http://amolenk.com/tags/Azure-Service-Bus/"/>
+    
+      <category term="Azure Storage" scheme="http://amolenk.com/tags/Azure-Storage/"/>
+    
+      <category term="Event Store" scheme="http://amolenk.com/tags/Event-Store/"/>
+    
+      <category term="Event Sourcing" scheme="http://amolenk.com/tags/Event-Sourcing/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Build Conferentie 2015 - Azure API Apps (Dutch)</title>
+    <link href="http://amolenk.com/2015/06/09/Build%20Conferentie%202015%20-%20Azure%20API%20Apps%20(Dutch)/"/>
+    <id>http://amolenk.com/2015/06/09/Build Conferentie 2015 - Azure API Apps (Dutch)/</id>
+    <published>2015-06-09T10:00:00.000Z</published>
+    <updated>2016-07-22T18:54:21.000Z</updated>
+    
+    <content type="html">&lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering vertel ik over Azure API Apps. Dit is een onderdeel van de Azure App Service (samen met Web Apps, Mobile Apps en Logic Apps) waarmee toepassingen kunnen worden ontwikkeld die eenvoudig te koppelen zijn aan een groot aantal API’s.&lt;/p&gt;
+&lt;p&gt;Je kunt de video &lt;a href=&quot;https://www.youtube.com/watch?v=a7S5rS-9-PU&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;hier&lt;/a&gt; bekijken.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering vertel ik over Azure API Apps. Dit i
+    
+    </summary>
+    
+    
+      <category term="Build 2015" scheme="http://amolenk.com/tags/Build-2015/"/>
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+      <category term="Azure API Apps" scheme="http://amolenk.com/tags/Azure-API-Apps/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>Build Conferentie 2015 - Azure Resource Manager (Dutch)</title>
+    <link href="http://amolenk.com/2015/05/07/Build%20Conferentie%202015%20-%20Azure%20Resource%20Manager%20(Dutch)/"/>
+    <id>http://amolenk.com/2015/05/07/Build Conferentie 2015 - Azure Resource Manager (Dutch)/</id>
+    <published>2015-05-07T10:00:00.000Z</published>
+    <updated>2016-07-22T18:54:21.000Z</updated>
+    
+    <content type="html">&lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering vertel ik over de nieuwe features die Microsoft heeft aangekondigd op het gebied van Azure Resource Manager. Hiermee zijn verschillende resources in Azure op een eenvoudige manier te groeperen en uit te rollen.&lt;/p&gt;
+&lt;p&gt;Je kunt de video &lt;a href=&quot;https://www.youtube.com/watch?v=PbX5YghJN-w&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;hier&lt;/a&gt; bekijken.&lt;/p&gt;
+</content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;In deze &lt;a href=&quot;http://www.dotnetflix.com&quot; target=&quot;_blank&quot; rel=&quot;external&quot;&gt;dotnetFlix&lt;/a&gt; aflevering vertel ik over de nieuwe features di
+    
+    </summary>
+    
+    
+      <category term="Build 2015" scheme="http://amolenk.com/tags/Build-2015/"/>
+    
+      <category term="Azure Resource Manager" scheme="http://amolenk.com/tags/Azure-Resource-Manager/"/>
+    
+      <category term="dotnetFlix" scheme="http://amolenk.com/tags/dotnetFlix/"/>
+    
+  </entry>
+  
+</feed>
