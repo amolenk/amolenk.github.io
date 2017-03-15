@@ -19,7 +19,7 @@
 <meta property="og:url" content="http://amolenk.com/2017/03/15/test/index.html">
 <meta property="og:site_name" content="Sander Molenkamp's Blog">
 <meta property="og:description" content="We had some problems earlier today with Service Fabric ARM templates that just seemed to have stopped working. We use these templates to spin up on-demand test environments.">
-<meta property="og:updated_time" content="2017-03-15T13:55:56.000Z">
+<meta property="og:updated_time" content="2017-03-15T14:00:18.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="ARM template broken due to breaking change in ServiceFabricNodeBootstrapAgent">
 <meta name="twitter:description" content="We had some problems earlier today with Service Fabric ARM templates that just seemed to have stopped working. We use these templates to spin up on-demand test environments.">
@@ -203,7 +203,7 @@
 <p>So where should this <code>dataRoot</code> value come from? It is loaded from the <code>current.config</code> file that’s in the same directory as the bootstrapper service. The <code>current.config</code> file will only contain the value however if it has been explicitly set in the ARM template (<code>dataPath</code> setting of the <code>ServiceFabricNodeBootstrapAgent</code>):</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">&quot;virtualMachineProfile&quot;: &#123;</span><br><span class="line">  &quot;extensionProfile&quot;: &#123;</span><br><span class="line">    &quot;extensions&quot;: [&#123;</span><br><span class="line">      ...</span><br><span class="line">      &quot;properties&quot;: &#123;</span><br><span class="line">        ...</span><br><span class="line">        &quot;settings&quot;: &#123;</span><br><span class="line">            &quot;dataPath&quot;: &quot;D:\\\\SvcFab&quot;,</span><br></pre></td></tr></table></figure>
 <p>So if your Service Fabric ARM deployments are suddenly not working anymore, check if you’ve specified the <code>dataPath</code> setting.</p>
-<p>I’ve opened an issue for this at <a href="">https://github.com/Azure/service-fabric-issues/issues/197</a> because I don’t think this should be a breaking change.</p>
+<p>I’ve opened an issue for this at <a href="">https://github.com/Azure/service-fabric-issues/issues/197</a>.</p>
 
             
         </div>

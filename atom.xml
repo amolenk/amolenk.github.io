@@ -5,7 +5,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://amolenk.com/"/>
-  <updated>2017-03-15T13:55:56.000Z</updated>
+  <updated>2017-03-15T14:00:18.000Z</updated>
   <id>http://amolenk.com/</id>
   
   <author>
@@ -20,7 +20,7 @@
     <link href="http://amolenk.com/2017/03/15/test/"/>
     <id>http://amolenk.com/2017/03/15/test/</id>
     <published>2017-03-15T13:32:41.000Z</published>
-    <updated>2017-03-15T13:55:56.000Z</updated>
+    <updated>2017-03-15T14:00:18.000Z</updated>
     
     <content type="html">&lt;p&gt;We had some problems earlier today with Service Fabric ARM templates that just seemed to have stopped working. We use these templates to spin up on-demand test environments.&lt;/p&gt;
 &lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
@@ -35,7 +35,7 @@
 &lt;p&gt;So where should this &lt;code&gt;dataRoot&lt;/code&gt; value come from? It is loaded from the &lt;code&gt;current.config&lt;/code&gt; file that’s in the same directory as the bootstrapper service. The &lt;code&gt;current.config&lt;/code&gt; file will only contain the value however if it has been explicitly set in the ARM template (&lt;code&gt;dataPath&lt;/code&gt; setting of the &lt;code&gt;ServiceFabricNodeBootstrapAgent&lt;/code&gt;):&lt;/p&gt;
 &lt;figure class=&quot;highlight plain&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;6&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;7&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;8&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;&amp;quot;virtualMachineProfile&amp;quot;: &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;  &amp;quot;extensionProfile&amp;quot;: &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    &amp;quot;extensions&amp;quot;: [&amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;      ...&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;      &amp;quot;properties&amp;quot;: &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        ...&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;        &amp;quot;settings&amp;quot;: &amp;#123;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;            &amp;quot;dataPath&amp;quot;: &amp;quot;D:\\\\SvcFab&amp;quot;,&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
 &lt;p&gt;So if your Service Fabric ARM deployments are suddenly not working anymore, check if you’ve specified the &lt;code&gt;dataPath&lt;/code&gt; setting.&lt;/p&gt;
-&lt;p&gt;I’ve opened an issue for this at &lt;a href=&quot;&quot;&gt;https://github.com/Azure/service-fabric-issues/issues/197&lt;/a&gt; because I don’t think this should be a breaking change.&lt;/p&gt;
+&lt;p&gt;I’ve opened an issue for this at &lt;a href=&quot;&quot;&gt;https://github.com/Azure/service-fabric-issues/issues/197&lt;/a&gt;.&lt;/p&gt;
 </content>
     
     <summary type="html">
