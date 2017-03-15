@@ -5,7 +5,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://amolenk.com/"/>
-  <updated>2017-03-15T14:00:18.000Z</updated>
+  <updated>2017-03-15T14:08:48.000Z</updated>
   <id>http://amolenk.com/</id>
   
   <author>
@@ -17,10 +17,10 @@
   
   <entry>
     <title>ARM template broken due to breaking change in ServiceFabricNodeBootstrapAgent</title>
-    <link href="http://amolenk.com/2017/03/15/test/"/>
-    <id>http://amolenk.com/2017/03/15/test/</id>
+    <link href="http://amolenk.com/2017/03/15/ServiceFabricNodeBootstrapAgent-breaking-change/"/>
+    <id>http://amolenk.com/2017/03/15/ServiceFabricNodeBootstrapAgent-breaking-change/</id>
     <published>2017-03-15T13:32:41.000Z</published>
-    <updated>2017-03-15T14:00:18.000Z</updated>
+    <updated>2017-03-15T14:08:48.000Z</updated>
     
     <content type="html">&lt;p&gt;We had some problems earlier today with Service Fabric ARM templates that just seemed to have stopped working. We use these templates to spin up on-demand test environments.&lt;/p&gt;
 &lt;a id=&quot;more&quot;&gt;&lt;/a&gt;
